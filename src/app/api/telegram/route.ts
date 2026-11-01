@@ -60,8 +60,8 @@ async function handle(update: Update) {
     user ??= await createUser({ name: msg.from?.first_name, tgChatId: chatId })
     await sendMessage(
       chatId,
-      `Hi${msg.from?.first_name ? ` ${msg.from.first_name}` : ''}! I'm Jarra 🫙\n\nEvery day I collect your free GoodDollar and save it in jars — Light, Data, Airtime — then pay those bills for you.\n\nFirst, connect your GoodDollar account (takes 1 minute):`,
-      [[{ text: '🔗 Set up Jarra', url: `${appUrl}/app?tg=${user.linkCode}` }]],
+      `Hi${msg.from?.first_name ? ` ${msg.from.first_name}` : ''}! I'm Jara, your AI agent.\n\nEvery day I collect your GoodDollar and put it to work: I save it in jars, pay your airtime, data and light, find you G$ rewards, and pay for AI help with research, assignments and ideas.\n\nFirst, connect your GoodDollar account (takes 1 minute):`,
+      [[{ text: 'Set up Jara', url: `${appUrl}/app?tg=${user.linkCode}` }]],
     )
     return
   }

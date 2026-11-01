@@ -3,7 +3,7 @@ import path from 'node:path'
 import { createClient, type Client, type InValue } from '@libsql/client'
 import { serverConfig } from './env'
 
-// SQLite locally (file:data/jarra.db), Turso/libSQL in production.
+// SQLite locally (file:data/jara.db), Turso/libSQL in production.
 // G$ amounts are stored as wei strings (18 decimals on Celo).
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -83,14 +83,14 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS mock_balances (address TEXT PRIMARY KEY, wei TEXT NOT NULL)`,
 ]
 
-const globalForDb = globalThis as typeof globalThis & { __jarraDb?: Promise<Client> }
+const globalForDb = globalThis as typeof globalThis & { __jaraDb?: Promise<Client> }
 
 export function db(): Promise<Client> {
-  globalForDb.__jarraDb ??= connect().catch((err: unknown) => {
-    globalForDb.__jarraDb = undefined
+  globalForDb.__jaraDb ??= connect().catch((err: unknown) => {
+    globalForDb.__jaraDb = undefined
     throw err
   })
-  return globalForDb.__jarraDb
+  return globalForDb.__jaraDb
 }
 
 async function connect(): Promise<Client> {

@@ -16,6 +16,6 @@ export async function POST() {
     return NextResponse.json({ steps: r.steps, message: r.message, state: await userState((await getUserById(user.id))!) })
   } catch (err) {
     console.error('[agent/run]', err)
-    return bad('Jarra hit a snag. Try again shortly.', 502)
+    return bad('Jara hit a snag. Try again shortly.', 502)
   }
 }

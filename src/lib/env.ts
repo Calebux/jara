@@ -18,7 +18,7 @@ export function serverConfig() {
   const chainMode: ChainMode = process.env.CHAIN_MODE === 'celo' ? 'celo' : 'mock'
   if (process.env.NODE_ENV === 'production' && chainMode === 'mock' && process.env.ALLOW_MOCK_IN_PROD !== 'true') {
     // Allowed so a demo deploy can run, but say so loudly.
-    console.warn('[jarra] CHAIN_MODE=mock in production — balances are simulated')
+    console.warn('[jara] CHAIN_MODE=mock in production — balances are simulated')
   }
   const vtpassEnv = process.env.VTPASS_ENV === 'live' ? 'live' : 'sandbox'
 
@@ -70,7 +70,7 @@ export function serverConfig() {
       secretKey: process.env.VTPASS_SECRET_KEY ?? '',
     },
     db: {
-      url: process.env.DATABASE_URL || 'file:data/jarra.db',
+      url: process.env.DATABASE_URL || 'file:data/jara.db',
       authToken: process.env.DATABASE_AUTH_TOKEN || undefined,
     },
     cronSecret: process.env.CRON_SECRET ?? '',

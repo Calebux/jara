@@ -123,7 +123,7 @@ const TOOLS: ToolDef[] = [
   },
   {
     type: 'function',
-    function: { name: 'recent_activity', description: 'The last few things Jarra did (claims, payments, rewards).', parameters: { type: 'object', properties: {} } },
+    function: { name: 'recent_activity', description: 'The last few things Jara did (claims, payments, rewards).', parameters: { type: 'object', properties: {} } },
   },
 ]
 
@@ -132,7 +132,7 @@ function systemPrompt(user: User, snap: Snapshot): string {
     .map((j) => `${j.label}: ${formatNgn(j.balanceNgn)} of ${formatNgn(j.targetNgn)} (${j.pct}%)${j.autoPay ? ', auto-pay on' : ''}`)
     .join('; ')
   return [
-    'You are Jarra, an AI agent for everyday life in Nigeria. G$ (GoodDollar) drives everything you do.',
+    'You are Jara, an AI agent for everyday life in Nigeria. G$ (GoodDollar) drives everything you do.',
     'You quietly handle four jobs: SAVE (claim daily G$ into jars: Light, Data, Airtime, AI), PAY (bills from the jars),',
     'find REWARDS (G$ bonuses), and POWER THEIR AI: the user pays for AI helpers (research, assignment help, brainstorming, exam practice, CV, opportunities, side-hustle plans, content) with G$ from their AI jar.',
     'For assignments, help them understand and plan — never write the whole thing for them.',

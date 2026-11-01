@@ -81,7 +81,7 @@ export async function runAgent(userId: string, opts: { force?: boolean } = {}): 
 
   await updateUser(user.id, { lastRunAt: Date.now() })
   if (steps.length) {
-    await logActivity(user.id, { type: 'agent', title: `Jarra did ${steps.length} thing${steps.length > 1 ? 's' : ''} for you`, detail: steps.map((s) => s.text).join(' · ').slice(0, 400) })
+    await logActivity(user.id, { type: 'agent', title: `Jara did ${steps.length} thing${steps.length > 1 ? 's' : ''} for you`, detail: steps.map((s) => s.text).join(' · ').slice(0, 400) })
   }
 
   const snap = await snapshot(user)

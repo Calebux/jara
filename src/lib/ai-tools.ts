@@ -105,7 +105,7 @@ export async function listAiRuns(userId: string, limit = 10): Promise<AiRun[]> {
 }
 
 function demoAnswer(tool: AiToolId, input: string): string {
-  return `⚠️ Demo preview — Jarra's AI brain (AntSeed) isn't connected, so this is a sample layout, not a real answer.\n\n${AI_TOOLS[tool].name} for: “${input.slice(0, 120)}”\n\n1. Summary of what you asked\n2. Key points, explained simply\n3. Examples that fit Nigeria\n4. What to do next\n\nConnect AntSeed (LLM_BASE_URL) for real answers. You were not charged.`
+  return `⚠️ Demo preview — Jara's AI brain (AntSeed) isn't connected, so this is a sample layout, not a real answer.\n\n${AI_TOOLS[tool].name} for: “${input.slice(0, 120)}”\n\n1. Summary of what you asked\n2. Key points, explained simply\n3. Examples that fit Nigeria\n4. What to do next\n\nConnect AntSeed (LLM_BASE_URL) for real answers. You were not charged.`
 }
 
 /**
@@ -121,7 +121,7 @@ export async function runAiTool(user: User, tool: AiToolId, input: string): Prom
   return withUserLock(user.id, async () => {
     await syncJars(user)
     if ((await gdBalance(user.agentAddress)) < cost) {
-      return { ok: false, output: '', costGd: 0, demo: false, message: `This costs G$ ${spec.priceGd}. Your jars will fill as Jarra claims your daily G$.` }
+      return { ok: false, output: '', costGd: 0, demo: false, message: `This costs G$ ${spec.priceGd}. Your jars will fill as Jara claims your daily G$.` }
     }
 
     if (!(await llmReachable())) {
@@ -148,7 +148,7 @@ export async function runAiTool(user: User, tool: AiToolId, input: string): Prom
       return { ok: false, output: '', costGd: 0, demo: false, message: 'The AI brain didn’t answer. You were not charged.' }
     }
 
-    // Pay: AI jar first, then free G$, then other jars.
+    // Pay: AI jar first, then spare G$, then other jars.
     if (!(await debitJars(user, 'ai', cost))) return { ok: false, output: '', costGd: 0, demo: false, message: 'Not enough G$.' }
     let hash: string | undefined
     try {

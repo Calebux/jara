@@ -10,7 +10,7 @@ import { bad, userState } from '../../_shared'
 
 export const dynamic = 'force-dynamic'
 
-// Demo mode only: add G$ or fast-forward a day so the "week in Jarra" can be shown live.
+// Demo mode only: add G$ or fast-forward a day so the "week in Jara" can be shown live.
 export async function POST(req: Request) {
   if (serverConfig().chain.mode !== 'mock') return bad('Demo tools are off', 404)
   const user = await requireUser()

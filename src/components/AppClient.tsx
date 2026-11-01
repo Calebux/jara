@@ -132,7 +132,7 @@ function TopBar({ state }: { state: State | null }) {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2 text-cream">
           <span className="grid h-9 w-9 place-items-center rounded-xl border-[3px] border-ink bg-crest text-ink shadow-chunk-sm"><Icon name="jar" className="h-5 w-5" /></span>
-          <span className="text-xl font-extrabold">Jarra</span>
+          <span className="text-xl font-extrabold">Jara</span>
         </Link>
         <div className="flex items-center gap-3">
           {state?.config.chainMode === 'mock' && <span className="text-xs font-bold tracking-widest text-cream/50 uppercase">Demo</span>}
@@ -164,7 +164,7 @@ function Welcome({ onStart, refCode }: { onStart: (s: State) => void; refCode?: 
         <Jar pct={62} color="mandarin" className="h-44 animate-bob" />
       </div>
       <div className="text-center">
-        <h1 className="text-5xl leading-none font-extrabold tracking-tight">Hi, I&apos;m Jarra.</h1>
+        <h1 className="text-5xl leading-none font-extrabold tracking-tight">Hi, I&apos;m Jara.</h1>
         <p className="mt-4 text-lg font-medium text-ink/75">I&apos;m your AI bill agent. I&apos;ll collect your GoodDollar every day and use it to pay your light, data and airtime.</p>
       </div>
       <form
@@ -311,11 +311,11 @@ function Onboarding({ state, setState, flash }: { state: State; setState: (s: St
         )}
       </Step>
 
-      <Step n={2} title="Let Jarra claim for you" done={false} active={step === 2}>
+      <Step n={2} title="Let Jara claim for you" done={false} active={step === 2}>
         {step === 2 && (
           <div className="grid gap-3">
             <p className="font-medium text-ink/75">
-              Approve one small transaction that links your Jarra jar to your GoodDollar account. Jarra can then collect your daily G$ — it can&apos;t touch your main wallet.
+              Approve one small transaction that links your Jara jar to your GoodDollar account. Jara can then collect your daily G$ — it can&apos;t touch your main wallet.
             </p>
             <div className="rounded-2xl border-[3px] border-dashed border-ink/40 bg-white px-4 py-3">
               <p className="text-xs font-extrabold tracking-wider text-ink/50 uppercase">Your jar address</p>
@@ -410,7 +410,7 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
       const r = await api<{ steps: { lane: Lane; text: string }[]; message: string; state: State }>('/api/agent/run', {})
       setState(r.state)
       setLastSteps(r.steps)
-      flash(r.steps.length ? `Jarra handled ${r.steps.length} thing${r.steps.length > 1 ? 's' : ''}` : 'All quiet — nothing needed doing')
+      flash(r.steps.length ? `Jara handled ${r.steps.length} thing${r.steps.length > 1 ? 's' : ''}` : 'All quiet — nothing needed doing')
     })
 
   const show = (t: 'home' | 'work' | 'chat') => `${tab === t ? '' : 'hidden'} lg:contents`
@@ -494,7 +494,7 @@ function AgentPanel({ state, busy, onRun, lastSteps }: { state: State; busy: boo
               <span className={`absolute inline-flex h-full w-full rounded-full bg-mandarin opacity-75 ${busy ? 'animate-ping' : ''}`} />
               <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-mandarin" />
             </span>
-            <p className="text-3xl leading-none font-extrabold tracking-tight sm:text-4xl">{busy ? 'Jarra is working…' : 'Jarra is on it'}</p>
+            <p className="text-3xl leading-none font-extrabold tracking-tight sm:text-4xl">{busy ? 'Jara is working…' : 'Jara is on it'}</p>
           </div>
           <p className="mt-2 text-sm font-semibold text-cream/55">Last check-in {ago(user.lastRunAt)} · checks in by itself every few hours</p>
         </div>
@@ -527,7 +527,7 @@ function AgentPanel({ state, busy, onRun, lastSteps }: { state: State; busy: boo
 
       {lastSteps && lastSteps.length > 0 && (
         <div className="animate-pop border-t-[4px] border-ink bg-cream px-6 py-4 text-ink sm:px-8">
-          <p className="text-xs font-extrabold tracking-widest text-ink/50 uppercase">Just now, Jarra…</p>
+          <p className="text-xs font-extrabold tracking-widest text-ink/50 uppercase">Just now, Jara…</p>
           <ul className="mt-2 grid gap-1.5">
             {lastSteps.map((st, i) => (
               <li key={i} className="flex items-start gap-2.5 text-sm font-bold">
@@ -702,7 +702,7 @@ function RewardsCard({ state, flash }: { state: State; flash: (t: string) => voi
         <h2 className="text-xl font-extrabold">Rewards</h2>
         <p className="font-extrabold text-forest">G$ {gdFmt(rewards.earnedGd)} earned</p>
       </div>
-      <p className="mt-1 text-sm font-semibold text-ink/55">Jarra collects these for you automatically.</p>
+      <p className="mt-1 text-sm font-semibold text-ink/55">Jara collects these for you automatically.</p>
       <ul className="mt-4 grid gap-2.5">
         {rewards.items.map((r) => (
           <li key={r.title} className="flex items-center gap-3">
@@ -836,7 +836,7 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
 
           {jar.kind === 'ai' ? (
             <p className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-ink/65 ring-2 ring-ink/10">
-              This jar pays for your AI helpers — research, assignment help, brainstorming, exam practice and more. Jarra fills it from your daily G$.
+              This jar pays for your AI helpers — research, assignment help, brainstorming, exam practice and more. Jara fills it from your daily G$.
             </p>
           ) : jar.kind === 'light' ? (
             <div className="grid gap-3">
@@ -880,7 +880,7 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-xs font-semibold text-ink/50">Jarra tops this jar up before it’s due and pays on time.</p>
+            <p className="mt-1.5 text-xs font-semibold text-ink/50">Jara tops this jar up before it’s due and pays on time.</p>
           </div>
 
           <button onClick={() => setAutoPay(!autoPay)} className="flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left ring-2 ring-ink/10">
@@ -930,7 +930,7 @@ const ACT_STYLE: Record<string, { icon: IconName; tint: string; sign: '+' | '−
 }
 
 function AgentLog({ items, chainMode }: { items: Activity[]; chainMode: string }) {
-  if (!items.length) return <p className="rounded-2xl bg-white p-6 text-center font-semibold text-ink/50 ring-2 ring-ink/10">Nothing yet. Tap “Check in now” to put Jarra to work.</p>
+  if (!items.length) return <p className="rounded-2xl bg-white p-6 text-center font-semibold text-ink/50 ring-2 ring-ink/10">Nothing yet. Tap “Check in now” to put Jara to work.</p>
   return (
     <ul className="overflow-hidden rounded-2xl bg-white ring-2 ring-ink/10">
       {items
@@ -1024,7 +1024,7 @@ function Chat({ state, setState, flash }: { state: State; setState: (s: State) =
           <span className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-forest bg-mandarin" />
         </div>
         <div>
-          <p className="text-lg leading-none font-extrabold">Jarra</p>
+          <p className="text-lg leading-none font-extrabold">Jara</p>
           <p className="mt-1 text-xs font-semibold text-cream/60">{status}</p>
         </div>
       </div>

@@ -31,10 +31,10 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 text-cream">
             <span className="grid h-10 w-10 place-items-center rounded-xl border-[3px] border-ink bg-crest text-ink shadow-chunk-sm"><Icon name="jar" className="h-6 w-6" /></span>
-            <span className="text-2xl font-extrabold tracking-tight">Jarra</span>
+            <span className="text-2xl font-extrabold tracking-tight">Jara</span>
           </Link>
           <Link href="/app" className="press rounded-full border-[3px] border-ink bg-mandarin px-5 py-2 font-bold text-ink shadow-chunk-sm">
-            Open Jarra
+            Open Jara
           </Link>
         </div>
       </header>
@@ -82,7 +82,7 @@ export default function Home() {
           <div className="mt-14 grid items-end gap-8 border-t-[3px] border-cream/15 pt-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
             <div>
               <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
-                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly handles everyday money for you. It collects your GoodDollar every day and makes it useful — your{' '}
+                Jara is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly handles everyday money for you. It collects your GoodDollar every day and makes it useful — your{' '}
                 <span className="text-crest">light, data and airtime</span>, bonuses you&apos;d miss, and{' '}
                 <span className="text-crest">AI help for school and hustle</span>.
               </p>
@@ -117,7 +117,7 @@ export default function Home() {
                 One AI agent. <span className="text-mandarin">Four jobs.</span> G$ drives all of them.
               </h2>
               <p className="mt-6 max-w-lg text-lg font-medium text-ink/70">
-                Jarra works while you sleep. Every morning you get one short message saying what it did with your G$, and you don&apos;t have to lift a finger.
+                Jara works while you sleep. Every morning you get one short message saying what it did with your G$, and you don&apos;t have to lift a finger.
               </p>
             </div>
                 <div className="relative mx-auto w-full max-w-[440px]">
@@ -137,7 +137,7 @@ export default function Home() {
                   </div>
                   <div className="h-5 rounded-lg border-[4px] border-ink bg-crest shadow-chunk" />
                   <div className="relative -mt-3 mr-[-8px] ml-auto w-[88%] rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-white p-5 text-ink shadow-chunk-lg">
-                    <p className="flex items-center gap-1.5 text-sm font-extrabold text-forest uppercase"><Icon name="bot" className="h-4 w-4" /> Jarra AI agent · 7:02am</p>
+                    <p className="flex items-center gap-1.5 text-sm font-extrabold text-forest uppercase"><Icon name="bot" className="h-4 w-4" /> Jara AI agent · 7:02am</p>
                     <p className="mt-1 text-lg leading-snug font-bold">Morning! While you slept I:</p>
                     <ul className="mt-2 grid gap-1 text-[15px] font-bold">
                       {([
@@ -159,7 +159,7 @@ export default function Home() {
             {[
               { n: '01', t: 'Saves', d: 'Claims your G$ every day and splits it into jars for Light, Data and Airtime.', c: 'bg-crest' },
               { n: '02', t: 'Pays', d: 'Knows when each bill comes round, tops the jar up in time and pays — then sends proof.', c: 'bg-mandarin' },
-              { n: '03', t: 'Finds rewards', d: 'Streaks, first bills, invites, weekly saving — Jarra spots G$ bonuses and collects them.', c: 'bg-cream' },
+              { n: '03', t: 'Finds rewards', d: 'Streaks, first bills, invites, weekly saving — Jara spots G$ bonuses and collects them.', c: 'bg-cream' },
               { n: '04', t: 'Powers your AI', d: 'Your G$ pays for AI help: research, assignments, brainstorming, exam practice, CVs and more.', c: 'bg-forest text-cream' },
             ].map((s) => (
               <div key={s.n} className={`press rounded-3xl border-[3px] border-ink p-7 shadow-chunk-lg ${s.c}`}>
@@ -176,7 +176,7 @@ export default function Home() {
       <section className="bg-mandarin py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <h2 className="text-4xl leading-none font-extrabold tracking-tight text-ink sm:text-6xl">A week with Jarra.</h2>
+            <h2 className="text-4xl leading-none font-extrabold tracking-tight text-ink sm:text-6xl">A week with Jara.</h2>
             <p className="max-w-sm text-lg font-semibold text-ink/80">Claims, payments and bonuses are real G$ transactions on Celo — small, daily, useful.</p>
           </div>
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -206,9 +206,9 @@ export default function Home() {
               Your G$ pays for <span className="rounded-xl bg-forest px-2 text-crest">your AI.</span>
             </h2>
             <p className="mt-6 max-w-lg text-lg font-medium text-ink/75">
-              No card, no subscription. The G$ you collect every day fills your AI jar, and each time you ask for help, Jarra pays for the AI with it.
+              No card, no subscription. The G$ you collect every day fills your AI jar, and each time you ask for help, Jara pays for the AI with it.
             </p>
-            <p className="mt-3 max-w-lg text-sm font-semibold text-ink/55">For assignments, Jarra helps you understand and plan — you still write it in your own words.</p>
+            <p className="mt-3 max-w-lg text-sm font-semibold text-ink/55">For assignments, Jara helps you understand and plan — you still write it in your own words.</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {[
@@ -241,7 +241,7 @@ export default function Home() {
               Talk to it like <span className="text-crest">your person.</span>
             </h2>
             <p className="mt-6 max-w-lg text-lg text-cream/80">
-              Jarra is an AI agent that understands English and Pidgin. It works out what you mean, shows you exactly what it&apos;s about to pay, and waits for your “yes”.
+              Jara is an AI agent that understands English and Pidgin. It works out what you mean, shows you exactly what it&apos;s about to pay, and waits for your “yes”.
             </p>
           </div>
           <div className="space-y-3 rounded-[2rem] border-[3px] border-ink bg-cream p-5 text-ink shadow-chunk-lg">
@@ -273,7 +273,7 @@ export default function Home() {
 
       <footer className="bg-forest-deep py-10 text-cream/70">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 text-sm font-semibold sm:flex-row sm:px-6">
-          <p className="flex items-center gap-2"><Icon name="jar" className="h-4 w-4" /> Jarra · GoodBuilders Season 5</p>
+          <p className="flex items-center gap-2"><Icon name="jar" className="h-4 w-4" /> Jara · GoodBuilders Season 5</p>
           <p>Built on GoodDollar &amp; Celo · Brain on AntSeed · by Calbridge Digital Labs</p>
         </div>
       </footer>

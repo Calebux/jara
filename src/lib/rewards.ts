@@ -5,7 +5,7 @@ import { syncJars } from './jars'
 import { logActivity, type User } from './users'
 
 // G$ rewards the agent finds and collects for the user. Each reward is keyed so
-// it pays once (or once per period). Paid from the Jarra treasury.
+// it pays once (or once per period). Paid from the Jara treasury.
 
 interface RewardRule {
   key: (user: User) => string

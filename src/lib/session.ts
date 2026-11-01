@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { getUserBySession, type User } from './users'
 
-export const SESSION_COOKIE = 'jarra_session'
+export const SESSION_COOKIE = 'jara_session'
 
 export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value

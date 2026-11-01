@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     if (!ok) return bad('Not connected yet. Approve the "connect account" transaction in your wallet, then check again.')
     if (!user.connected) {
       await updateUser(user.id, { connected: true })
-      await logActivity(user.id, { type: 'move', title: 'Jarra connected to your GoodDollar account 🎉' })
+      await logActivity(user.id, { type: 'move', title: 'Jara connected to your GoodDollar account 🎉' })
     }
     return NextResponse.json(await userState((await getUserById(user.id))!))
   }

@@ -40,7 +40,7 @@ export interface JarView {
   autoPay: boolean
   details: JarDetails
   everyDays: number | null
-  /** ms timestamp when the bill is next due, if Jarra knows the cadence. */
+  /** ms timestamp when the bill is next due, if Jara knows the cadence. */
   dueAt: number | null
 }
 
@@ -129,7 +129,7 @@ export async function syncJars(user: User): Promise<bigint> {
   const allocated = jars.reduce((s, j) => s + j.balanceWei, 0n)
 
   if (balance < allocated) {
-    // Balance dropped outside Jarra: shrink jars proportionally so the ledger never exceeds reality.
+    // Balance dropped outside Jara: shrink jars proportionally so the ledger never exceeds reality.
     for (const j of jars) {
       const next = allocated === 0n ? 0n : (j.balanceWei * balance) / allocated
       await setJarBalance(user.id, j.kind, next)

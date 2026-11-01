@@ -10,7 +10,7 @@ interface Report {
   bills: { count: number; gd: number; ngn: number }
 }
 
-const KEY_STORE = 'jarra_admin_key'
+const KEY_STORE = 'jara_admin_key'
 const usd = (n: number) => `$${n < 1 ? n.toFixed(4) : n.toFixed(2)}`
 const gd = (n: number) => `G$ ${Math.round(n).toLocaleString()}`
 const ngn = (n: number) => `₦${Math.round(n).toLocaleString()}`
@@ -81,7 +81,7 @@ export function TreasuryClient() {
           <span className="grid h-11 w-11 place-items-center rounded-xl border-[3px] border-ink bg-crest">
             <Icon name="coins" className="h-6 w-6" />
           </span>
-          <h1 className="mt-4 text-2xl font-extrabold">Jarra treasury</h1>
+          <h1 className="mt-4 text-2xl font-extrabold">Jara treasury</h1>
           <p className="mt-1 text-sm font-semibold text-ink/60">Operator only. Enter the ADMIN_KEY from the server env.</p>
           <input
             type="password"

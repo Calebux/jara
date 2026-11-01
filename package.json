@@ -1,8 +1,8 @@
 {
-  "name": "jarra",
+  "name": "jara",
   "version": "0.1.0",
   "private": true,
-  "description": "Jarra — an AI agent that turns your daily GoodDollar into paid bills",
+  "description": "Jara — the AI agent that puts your G$ to work: saves it, pays bills, finds rewards and pays for AI help",
   "license": "MIT",
   "scripts": {
     "dev": "next dev -p 3400",
