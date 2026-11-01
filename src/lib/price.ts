@@ -38,3 +38,27 @@ export async function gdForNgn(ngn: number): Promise<bigint> {
 export async function ngnForGd(wei: bigint): Promise<number> {
   return Math.floor(Number(formatEther(wei)) * (await ngnPerGd()))
 }
+
+// G$ in US dollars, for comparing G$ received against USDC spent on AI.
+let usdCache: { rate: number; at: number } | null = null
+const DEMO_USD_RATE = 0.0001
+
+export async function usdPerGd(): Promise<number> {
+  if (process.env.GD_USD_RATE) return Number(process.env.GD_USD_RATE)
+  if (usdCache && Date.now() - usdCache.at < TTL) return usdCache.rate
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=gooddollar&vs_currencies=usd', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    })
+    const json = (await res.json()) as { gooddollar?: { usd?: number } }
+    const rate = json.gooddollar?.usd
+    if (!rate || !Number.isFinite(rate)) throw new Error('no G$ price')
+    usdCache = { rate, at: Date.now() }
+    return rate
+  } catch (err) {
+    if (usdCache) return usdCache.rate
+    if (serverConfig().chain.mode === 'mock') return DEMO_USD_RATE
+    throw err
+  }
+}

@@ -86,7 +86,7 @@ const TOOLS: ToolDef[] = [
   },
   {
     type: 'function',
-    function: { name: 'claim_now', description: "Claim today's free G$ UBI into the jars now.", parameters: { type: 'object', properties: {} } },
+    function: { name: 'claim_now', description: "Claim today's G$ UBI into the jars now.", parameters: { type: 'object', properties: {} } },
   },
   {
     type: 'function',
@@ -133,7 +133,7 @@ function systemPrompt(user: User, snap: Snapshot): string {
     .join('; ')
   return [
     'You are Jarra, an AI agent for everyday life in Nigeria. G$ (GoodDollar) drives everything you do.',
-    'You quietly handle four jobs: SAVE (claim free daily G$ into jars: Light, Data, Airtime), PAY (bills from the jars),',
+    'You quietly handle four jobs: SAVE (claim daily G$ into jars: Light, Data, Airtime, AI), PAY (bills from the jars),',
     'find REWARDS (G$ bonuses), and POWER THEIR AI: the user pays for AI helpers (research, assignment help, brainstorming, exam practice, CV, opportunities, side-hustle plans, content) with G$ from their AI jar.',
     'For assignments, help them understand and plan — never write the whole thing for them.',
     'Talk like a warm Nigerian friend: short, simple English; understand Pidgin and reply in Pidgin if the user writes Pidgin.',
@@ -336,7 +336,7 @@ async function rulesRespond(user: User, text: string, snap: Snapshot): Promise<A
     }
     case 'move': {
       const t = await executeTool(user, 'move_to_jar', { jar: intent.jar, amount_ngn: intent.amountNgn }, out)
-      return { text: t.startsWith('error') ? "There's no free G$ to move right now." : `Done — ${t.replace('moved', 'moved')} into ${intent.jar}.`, engine: 'rules' }
+      return { text: t.startsWith('error') ? "There's no spare G$ to move right now." : `Done — ${t.replace('moved', 'moved')} into ${intent.jar}.`, engine: 'rules' }
     }
     default: {
       const light = snap.jars.find((j) => j.kind === 'light')

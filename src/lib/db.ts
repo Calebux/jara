@@ -52,6 +52,13 @@ const SCHEMA = [
     created_at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS messages_user_idx ON messages (user_id, id)`,
+  // USDC the operator has put into AntSeed, to track how much G$ has paid it back.
+  `CREATE TABLE IF NOT EXISTS treasury_topups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount_usd REAL NOT NULL,
+    note TEXT,
+    created_at INTEGER NOT NULL
+  )`,
   // AI helper uses, paid in G$.
   `CREATE TABLE IF NOT EXISTS ai_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
