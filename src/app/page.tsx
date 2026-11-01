@@ -53,23 +53,37 @@ export default function Home() {
               </span>
               <span className="block">Your free</span>
               <span className="block">
-                <span className="text-crest">G$</span> pays
+                <span className="text-crest">G$,</span> put
               </span>
               <span className="block">
-                your{' '}
+                to{' '}
                 <span className="relative mt-3 inline-block -rotate-3 rounded-[0.18em] border-[5px] border-ink bg-mandarin px-[0.12em] pt-[0.04em] pb-[0.1em] text-ink shadow-[10px_10px_0_0_#0b1f16]">
-                  bills.
+                  work.
                 </span>
               </span>
             </h1>
+
+            <ul className="relative z-10 mt-10 flex flex-wrap gap-3">
+              {[
+                { t: 'Saves it', c: 'bg-crest text-ink' },
+                { t: 'Pays your bills', c: 'bg-mandarin text-ink' },
+                { t: 'Finds you rewards', c: 'bg-cream text-ink' },
+                { t: 'Powers your AI', c: 'bg-forest-soft text-cream' },
+              ].map((j, i) => (
+                <li key={j.t} className={`flex items-center gap-2 rounded-full border-[3px] border-ink px-4 py-2 text-base font-extrabold uppercase shadow-chunk-sm sm:text-lg ${j.c}`}>
+                  <span className="text-sm opacity-60">0{i + 1}</span> {j.t}
+                </li>
+              ))}
+            </ul>
 
           </div>
 
           <div className="mt-12 grid items-end gap-12 lg:mt-14 lg:grid-cols-[1fr_440px]">
             <div>
               <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
-                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly works for you. It saves your free GoodDollar,{' '}
-                <span className="text-crest">pays your bills, finds you rewards</span> — and your G$ pays for AI help with research, assignments and ideas.
+                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly handles everyday money for you. It collects your free GoodDollar every day and makes it useful — your{' '}
+                <span className="text-crest">light, data and airtime</span>, bonuses you&apos;d miss, and{' '}
+                <span className="text-crest">AI help for school and hustle</span>.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <a
@@ -89,22 +103,30 @@ export default function Home() {
             </div>
 
             <div className="relative mx-auto w-full max-w-[440px]">
-              <div className="grid grid-cols-3 items-end gap-4 px-3">
+              <div className="grid grid-cols-4 items-end gap-3 px-2">
                 <div className="animate-bob" style={{ animationDelay: '0s' }}>
-                  <Jar pct={72} color="crest" lid="#ff6b00" className="h-48 sm:h-52" label={{ icon: 'bolt', text: 'Light' }} />
+                  <Jar pct={72} color="crest" lid="#ff6b00" className="h-40 sm:h-44" label={{ icon: 'bolt', text: 'Light' }} />
                 </div>
                 <div className="animate-bob" style={{ animationDelay: '0.4s' }}>
-                  <Jar pct={45} color="mandarin" className="h-56 sm:h-60" label={{ icon: 'signal', text: 'Data' }} />
+                  <Jar pct={45} color="mandarin" className="h-48 sm:h-52" label={{ icon: 'signal', text: 'Data' }} />
                 </div>
                 <div className="animate-bob" style={{ animationDelay: '0.8s' }}>
-                  <Jar pct={90} color="crest" lid="#ff6b00" className="h-44 sm:h-48" label={{ icon: 'phone', text: 'Airtime' }} />
+                  <Jar pct={90} color="crest" lid="#ff6b00" className="h-36 sm:h-40" label={{ icon: 'phone', text: 'Airtime' }} />
+                </div>
+                <div className="animate-bob" style={{ animationDelay: '1.2s' }}>
+                  <Jar pct={60} color="mandarin" lid="#1d5a3f" className="h-44 sm:h-48" label={{ icon: 'spark', text: 'AI' }} />
                 </div>
               </div>
               <div className="h-5 rounded-lg border-[4px] border-ink bg-crest shadow-chunk" />
               <div className="relative -mt-3 mr-[-8px] ml-auto w-[88%] rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-cream p-5 text-ink shadow-chunk-lg">
                 <p className="text-sm font-extrabold text-forest uppercase">🤖 Jarra AI agent · 7:02am</p>
-                <p className="mt-1 text-lg leading-snug font-bold">Light jar don full 🎉 I&apos;ve paid ₦3,000 for your meter.</p>
-                <p className="mt-2 rounded-xl bg-crest px-3 py-1.5 font-mono text-sm font-bold">4021 7781 0093 2215 6650</p>
+                <p className="mt-1 text-lg leading-snug font-bold">Morning! While you slept I:</p>
+                <ul className="mt-2 grid gap-1 text-[15px] font-bold">
+                  <li>✅ Claimed G$ 1,400 into your jars</li>
+                  <li>💡 Paid ₦3,000 light — token sent</li>
+                  <li>⭐ Collected a G$ 400 saver bonus</li>
+                  <li>✨ AI jar covers 2 research briefs</li>
+                </ul>
               </div>
             </div>
           </div>
