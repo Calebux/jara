@@ -10,18 +10,44 @@ const FILLS = {
 } as const
 
 export type JarColor = keyof typeof FILLS
+export type JarIcon = 'bolt' | 'signal' | 'phone'
+
+// 24x24 icons drawn in the jar label.
+function LabelIcon({ icon }: { icon: JarIcon }) {
+  if (icon === 'bolt') return <path d="M13.5 1.5 4 13.5h7l-1.5 9L19 10.5h-7z" fill="#ff6b00" stroke="#0b1f16" strokeWidth="2.4" strokeLinejoin="round" />
+  if (icon === 'signal')
+    return (
+      <g fill="#0b1f16">
+        <rect x="2" y="15" width="5" height="7" rx="1.5" />
+        <rect x="9.5" y="9.5" width="5" height="12.5" rx="1.5" />
+        <rect x="17" y="3" width="5" height="19" rx="1.5" fill="#ff6b00" stroke="#0b1f16" strokeWidth="2" />
+      </g>
+    )
+  return (
+    <path
+      d="M6 2.5h3.5l2 5-2.6 1.7a11.5 11.5 0 0 0 5.9 5.9l1.7-2.6 5 2V18a3 3 0 0 1-3 3C10 21 3 14 3 5.5a3 3 0 0 1 3-3z"
+      fill="#ffc72c"
+      stroke="#0b1f16"
+      strokeWidth="2.4"
+      strokeLinejoin="round"
+    />
+  )
+}
 
 export function Jar({
   pct,
   color = 'mandarin',
   className = '',
   lid = '#ffc72c',
+  label,
   children,
 }: {
   pct: number
   color?: JarColor
   className?: string
   lid?: string
+  /** A sticker on the jar: icon + word, e.g. { icon: 'bolt', text: 'Light' } */
+  label?: { icon: JarIcon; text: string }
   children?: React.ReactNode
 }) {
   const id = useId().replace(/:/g, '')
@@ -64,6 +90,27 @@ export function Jar({
           stroke="#0b1f16"
           strokeWidth="5"
         />
+        {label && (
+          <g>
+            <rect x="36" y="84" width="88" height="60" rx="12" fill="#0b1f16" transform="translate(3 3)" />
+            <rect x="36" y="84" width="88" height="60" rx="12" fill="#fff6e5" stroke="#0b1f16" strokeWidth="4" />
+            <g transform="translate(68 92)">
+              <LabelIcon icon={label.icon} />
+            </g>
+            <text
+              x="80"
+              y="134"
+              textAnchor="middle"
+              fontSize="13"
+              fontWeight="800"
+              letterSpacing="1.2"
+              fill="#0b1f16"
+              style={{ fontFamily: 'var(--font-bricolage), sans-serif', textTransform: 'uppercase' }}
+            >
+              {label.text.toUpperCase()}
+            </text>
+          </g>
+        )}
         {/* lid */}
         <rect x="40" y="12" width="80" height="26" rx="8" fill="#0b1f16" transform="translate(4 4)" />
         <rect x="40" y="12" width="80" height="26" rx="8" fill={lid} stroke="#0b1f16" strokeWidth="5" />

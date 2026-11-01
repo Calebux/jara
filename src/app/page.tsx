@@ -63,27 +63,9 @@ export default function Home() {
               </span>
             </h1>
 
-            {/* jars, tucked beside the headline on large screens */}
-            <div className="pointer-events-none absolute top-[38%] right-0 hidden w-[32%] grid-cols-3 items-end gap-3 lg:grid">
-              <div className="animate-bob" style={{ animationDelay: '0s' }}>
-                <Jar pct={72} color="crest" lid="#ff6b00" className="h-52">
-                  <span className="text-3xl">💡</span>
-                </Jar>
-              </div>
-              <div className="animate-bob" style={{ animationDelay: '0.4s' }}>
-                <Jar pct={45} color="mandarin" className="h-64">
-                  <span className="text-3xl">📶</span>
-                </Jar>
-              </div>
-              <div className="animate-bob" style={{ animationDelay: '0.8s' }}>
-                <Jar pct={90} color="crest" lid="#ff6b00" className="h-48">
-                  <span className="text-3xl">📞</span>
-                </Jar>
-              </div>
-            </div>
           </div>
 
-          <div className="mt-12 grid items-end gap-10 lg:mt-16 lg:grid-cols-[1fr_auto]">
+          <div className="mt-12 grid items-end gap-12 lg:mt-14 lg:grid-cols-[1fr_440px]">
             <div>
               <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
                 Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> in your chat. It collects your free GoodDollar every day, saves it in jars —{' '}
@@ -100,16 +82,30 @@ export default function Home() {
                   href="/app"
                   className="press inline-flex items-center justify-center rounded-2xl border-[4px] border-ink bg-cream px-8 py-5 text-xl font-extrabold text-ink uppercase shadow-chunk-lg"
                 >
-                  Try it now
+                  Use it in your browser
                 </Link>
               </div>
-              <p className="mt-5 text-sm font-bold tracking-wide text-cream/60 uppercase">No crypto talk · No gas · No new app</p>
+              <p className="mt-5 text-sm font-bold tracking-wide text-cream/60 uppercase">Works on any phone · No crypto talk · No gas</p>
             </div>
 
-            <div className="relative w-full max-w-sm rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-cream p-5 text-ink shadow-chunk-lg lg:mb-2">
-              <p className="text-sm font-extrabold text-forest uppercase">🤖 Jarra AI agent · 7:02am</p>
-              <p className="mt-1 text-lg leading-snug font-bold">Light jar don full 🎉 I&apos;ve paid ₦3,000 for your meter.</p>
-              <p className="mt-2 rounded-xl bg-crest px-3 py-1.5 font-mono text-sm font-bold">4021 7781 0093 2215 6650</p>
+            <div className="relative mx-auto w-full max-w-[440px]">
+              <div className="grid grid-cols-3 items-end gap-4 px-3">
+                <div className="animate-bob" style={{ animationDelay: '0s' }}>
+                  <Jar pct={72} color="crest" lid="#ff6b00" className="h-48 sm:h-52" label={{ icon: 'bolt', text: 'Light' }} />
+                </div>
+                <div className="animate-bob" style={{ animationDelay: '0.4s' }}>
+                  <Jar pct={45} color="mandarin" className="h-56 sm:h-60" label={{ icon: 'signal', text: 'Data' }} />
+                </div>
+                <div className="animate-bob" style={{ animationDelay: '0.8s' }}>
+                  <Jar pct={90} color="crest" lid="#ff6b00" className="h-44 sm:h-48" label={{ icon: 'phone', text: 'Airtime' }} />
+                </div>
+              </div>
+              <div className="h-5 rounded-lg border-[4px] border-ink bg-crest shadow-chunk" />
+              <div className="relative -mt-3 mr-[-8px] ml-auto w-[88%] rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-cream p-5 text-ink shadow-chunk-lg">
+                <p className="text-sm font-extrabold text-forest uppercase">🤖 Jarra AI agent · 7:02am</p>
+                <p className="mt-1 text-lg leading-snug font-bold">Light jar don full 🎉 I&apos;ve paid ₦3,000 for your meter.</p>
+                <p className="mt-2 rounded-xl bg-crest px-3 py-1.5 font-mono text-sm font-bold">4021 7781 0093 2215 6650</p>
+              </div>
             </div>
           </div>
         </div>

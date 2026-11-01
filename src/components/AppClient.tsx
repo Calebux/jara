@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createWalletClient, custom, type EIP1193Provider } from 'viem'
 import { celo } from 'viem/chains'
 import { DISCOS, DISCO_INFO, formatNgn } from '@/lib/catalog'
-import { Jar, type JarColor } from './Jar'
+import { Jar, type JarColor, type JarIcon } from './Jar'
 
 // ---------- types mirrored from /api/_shared userState ----------
 
@@ -54,6 +54,7 @@ interface State {
 }
 
 const JAR_COLOR: Record<JarView['kind'], JarColor> = { light: 'crest', data: 'mandarin', airtime: 'forest' }
+const JAR_ICON: Record<JarView['kind'], JarIcon> = { light: 'bolt', data: 'signal', airtime: 'phone' }
 const IDENTITY = '0xC361A6E67822a0EDc17D899227dd9FC50BD62F42'
 const CONNECT_ABI = [
   { type: 'function', name: 'connectAccount', stateMutability: 'nonpayable', inputs: [{ name: 'account', type: 'address' }], outputs: [] },
@@ -151,9 +152,7 @@ function Welcome({ onStart }: { onStart: (s: State) => void }) {
   return (
     <main className="mx-auto grid max-w-md gap-8 px-4 py-12">
       <div className="flex justify-center">
-        <Jar pct={62} color="mandarin" className="h-44 animate-bob">
-          <span className="text-3xl">👋</span>
-        </Jar>
+        <Jar pct={62} color="mandarin" className="h-44 animate-bob" />
       </div>
       <div className="text-center">
         <h1 className="text-5xl leading-none font-extrabold tracking-tight">Hi, I&apos;m Jarra.</h1>
@@ -430,9 +429,8 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
                       color={JAR_COLOR[j.kind]}
                       lid={j.kind === 'airtime' ? '#ff6b00' : '#ffc72c'}
                       className="h-32 transition group-hover:-translate-y-1.5 sm:h-40"
-                    >
-                      <span className="text-2xl sm:text-3xl">{j.emoji}</span>
-                    </Jar>
+                      label={{ icon: JAR_ICON[j.kind], text: j.label }}
+                    />
                   </button>
                 ))}
               </div>
