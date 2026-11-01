@@ -66,7 +66,14 @@ export async function withUserLock<T>(userId: string, fn: () => Promise<T>): Pro
 }
 
 export async function getJars(userId: string): Promise<Jar[]> {
-  const r = await run('SELECT * FROM jars WHERE user_id = ?', [userId])
+  let r = await run('SELECT * FROM jars WHERE user_id = ?', [userId])
+  if (r.rows.length < JAR_KINDS.length) {
+    // Jars added in later versions (e.g. the AI jar) for existing users.
+    for (const kind of JAR_KINDS) {
+      await run('INSERT OR IGNORE INTO jars (user_id, kind, target_ngn) VALUES (?, ?, ?)', [userId, kind, JAR_INFO[kind].defaultTarget])
+    }
+    r = await run('SELECT * FROM jars WHERE user_id = ?', [userId])
+  }
   const byKind = new Map(r.rows.map((x) => [x.kind as JarKind, x]))
   return JAR_KINDS.map((kind) => {
     const x = byKind.get(kind)

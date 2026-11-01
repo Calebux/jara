@@ -22,7 +22,7 @@ export interface ToolDef {
   function: { name: string; description: string; parameters: Record<string, unknown> }
 }
 
-export async function chat(messages: ChatMessage[], tools: ToolDef[]): Promise<ChatMessage> {
+export async function chat(messages: ChatMessage[], tools: ToolDef[], maxTokens = 600): Promise<ChatMessage> {
   const cfg = serverConfig().llm
   if (cfg.disabled) throw new Error('LLM disabled')
   const headers: Record<string, string> = {
@@ -33,7 +33,7 @@ export async function chat(messages: ChatMessage[], tools: ToolDef[]): Promise<C
   const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ model: cfg.model, messages, tools, tool_choice: 'auto', temperature: 0.2, max_tokens: 600 }),
+    body: JSON.stringify({ model: cfg.model, messages, ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.3, max_tokens: maxTokens }),
     signal: AbortSignal.timeout(30_000),
   })
   if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)

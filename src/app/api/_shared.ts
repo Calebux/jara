@@ -4,18 +4,18 @@ import { llmReachable } from '@/lib/agent/llm'
 import { serverConfig } from '@/lib/env'
 import { snapshot } from '@/lib/jars'
 import { botLink } from '@/lib/telegram'
-import { SKILLS, CITIES, userGigs } from '@/lib/gigs'
+import { AI_TOOLS, listAiRuns } from '@/lib/ai-tools'
 import { rewardProgress } from '@/lib/rewards'
 import { listActivity, type User } from '@/lib/users'
 
 export async function userState(user: User) {
   const cfg = serverConfig()
-  const [snap, activity, messages, llmUp, gigs, rewards] = await Promise.all([
+  const [snap, activity, messages, llmUp, aiRuns, rewards] = await Promise.all([
     snapshot(user),
     listActivity(user.id, 30),
     listMessages(user.id),
     llmReachable(),
-    userGigs(user.id),
+    listAiRuns(user.id, 8),
     rewardProgress(user),
   ])
   return {
@@ -29,14 +29,12 @@ export async function userState(user: User) {
       telegramLinked: Boolean(user.tgChatId),
       telegramLink: botLink(user.linkCode),
       hasPending: Boolean(user.pending),
-      skills: user.skills,
-      city: user.city,
       lastRunAt: user.lastRunAt,
       inviteLink: `${cfg.appUrl}/app?ref=${user.linkCode}`,
     },
-    gigs,
+    aiRuns,
+    aiTools: Object.entries(AI_TOOLS).map(([id, t]) => ({ id, name: t.name, blurb: t.blurb, priceGd: t.priceGd, placeholder: t.placeholder })),
     rewards,
-    options: { skills: SKILLS, cities: CITIES },
     snapshot: snap,
     activity,
     messages,

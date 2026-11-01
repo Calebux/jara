@@ -37,22 +37,16 @@ export const REWARD_RULES: RewardRule[] = [
     eligible: async (u) => (await count(`SELECT COUNT(*) AS n FROM activity WHERE user_id = ? AND type = 'pay' AND status = 'done'`, [u.id])) > 0,
   },
   {
-    key: () => 'profile',
-    title: 'Told Jarra what you can do',
-    amountGd: 200,
-    eligible: async (u) => u.skills.length > 0,
-  },
-  {
     key: () => `weekly-saver-${isoWeek()}`,
     title: 'Weekly saver — claimed 5 days this week',
     amountGd: 400,
     eligible: async (u) => (await count(`SELECT COUNT(*) AS n FROM activity WHERE user_id = ? AND type = 'claim' AND created_at > ?`, [u.id, Date.now() - WEEK])) >= 5,
   },
   {
-    key: () => 'first-gig',
-    title: 'First gig completed',
-    amountGd: 500,
-    eligible: async (u) => (await count(`SELECT COUNT(*) AS n FROM gig_claims WHERE user_id = ? AND status = 'paid'`, [u.id])) > 0,
+    key: () => 'first-ai',
+    title: 'First AI helper paid with G$',
+    amountGd: 200,
+    eligible: async (u) => (await count(`SELECT COUNT(*) AS n FROM ai_runs WHERE user_id = ? AND demo = 0`, [u.id])) > 0,
   },
 ]
 
@@ -106,8 +100,7 @@ export async function rewardProgress(user: User) {
     items: [
       { title: 'Weekly saver', detail: `${Math.min(claimsThisWeek, 5)}/5 claim days`, amountGd: 400, done: paid.has(`weekly-saver-${isoWeek()}`), progress: Math.min(claimsThisWeek, 5) / 5 },
       { title: 'First bill with G$', detail: 'Pay any bill', amountGd: 300, done: paid.has('first-bill'), progress: paid.has('first-bill') ? 1 : 0 },
-      { title: 'Tell Jarra your skills', detail: 'Unlocks paid gigs', amountGd: 200, done: paid.has('profile'), progress: user.skills.length ? 1 : 0 },
-      { title: 'First gig', detail: 'Finish any gig', amountGd: 500, done: paid.has('first-gig'), progress: paid.has('first-gig') ? 1 : 0 },
+      { title: 'First AI helper', detail: 'Use any AI helper', amountGd: 200, done: paid.has('first-ai'), progress: paid.has('first-ai') ? 1 : 0 },
       { title: 'Invite a friend', detail: 'Per friend who joins', amountGd: 1000, done: false, progress: 0 },
     ],
   }

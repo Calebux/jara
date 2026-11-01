@@ -3,7 +3,7 @@ import { describeAction, payBill, prepareBill } from './bills'
 import { claimUbi, sendGdFromTreasury } from './chain'
 import { serverConfig } from './env'
 import { getJars, snapshot, syncJars, withUserLock } from './jars'
-import { listConnectedUsers, logActivity, updateUser, type User } from './users'
+import { isBillKind, listConnectedUsers, logActivity, updateUser, type User } from './users'
 import { decryptAgentKey } from './wallets'
 
 export function lagosDay(offsetDays = 0): string {
@@ -62,7 +62,7 @@ export async function runDaily(user: User, opts: { force?: boolean } = {}): Prom
   const paid: string[] = []
   for (const jar of await getJars(user.id)) {
     // Jars with a known cadence are paid on their due date by the agent routine instead.
-    if (!jar.autoPay || jar.everyDays) continue
+    if (!isBillKind(jar.kind) || !jar.autoPay || jar.everyDays) continue
     const view = (await snapshot(user)).jars.find((j) => j.kind === jar.kind)!
     if (view.balanceNgn < jar.targetNgn || jar.targetNgn <= 0) continue
     const prepared = await prepareBill(user, { kind: jar.kind, amountNgn: jar.targetNgn })

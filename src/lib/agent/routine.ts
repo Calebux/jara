@@ -2,19 +2,19 @@ import { formatEther } from 'viem'
 import { describeAction, payBill, prepareBill } from '../bills'
 import { formatNgn } from '../catalog'
 import { runDaily } from '../daily'
-import { matchGigs } from '../gigs'
+import { AI_TOOLS } from '../ai-tools'
 import { getJars, jarDueAt, moveToJar, snapshot } from '../jars'
 import { collectRewards } from '../rewards'
-import { JAR_INFO, getUserById, listConnectedUsers, logActivity, updateUser, type User } from '../users'
+import { JAR_INFO, isBillKind, getUserById, listConnectedUsers, logActivity, updateUser, type User } from '../users'
 
 // The agent's own work loop. Runs on a schedule (cron) without the user asking:
 //   SAVE     claim today's G$ UBI and share it across the jars
 //   PAY      top up jars that are due soon, pay bills on their due date
 //   REWARDS  find and collect G$ rewards the user qualifies for
-//   WORK     match new G$-paying gigs to the user's skills and city
+//   AI       keep the AI jar funded so G$ pays for the user's AI helpers
 // Then it sends one quiet summary. G$ is what moves at every step.
 
-export type Lane = 'save' | 'pay' | 'rewards' | 'work'
+export type Lane = 'save' | 'pay' | 'rewards' | 'ai'
 export interface AgentStep {
   lane: Lane
   text: string
@@ -35,7 +35,8 @@ export async function runAgent(userId: string, opts: { force?: boolean } = {}): 
   // PAY: bills with a known cadence
   user = (await getUserById(userId))!
   for (const jar of await getJars(user.id)) {
-    if (!jar.everyDays) continue
+    if (!isBillKind(jar.kind) || !jar.everyDays) continue
+    const kind = jar.kind
     const due = jarDueAt(jar)
     const view = (await snapshot(user)).jars.find((j) => j.kind === jar.kind)!
     const label = JAR_INFO[jar.kind].label
@@ -51,7 +52,7 @@ export async function runAgent(userId: string, opts: { force?: boolean } = {}): 
     if (jar.autoPay && payNow) {
       const fresh = (await snapshot(user)).jars.find((j) => j.kind === jar.kind)!
       if (fresh.balanceNgn >= jar.targetNgn && jar.targetNgn > 0) {
-        const prepared = await prepareBill(user, { kind: jar.kind, amountNgn: jar.targetNgn })
+        const prepared = await prepareBill(user, { kind, amountNgn: jar.targetNgn })
         if ('error' in prepared) {
           steps.push({ lane: 'pay', text: `Couldn’t pay ${label}: ${prepared.error}` })
         } else {
@@ -66,12 +67,16 @@ export async function runAgent(userId: string, opts: { force?: boolean } = {}): 
   user = (await getUserById(userId))!
   for (const r of await collectRewards(user)) steps.push({ lane: 'rewards', text: `Found a reward: ${r.title} (+G$ ${r.amountGd.toLocaleString()})` })
 
-  // WORK
-  if (user.skills.length || user.city) {
-    for (const g of await matchGigs(user)) steps.push({ lane: 'work', text: `Found work: ${g.title} — pays G$ ${g.rewardGd.toLocaleString()}` })
-  } else {
-    const gigs = await matchGigs(user, 1)
-    for (const g of gigs) steps.push({ lane: 'work', text: `Found work anyone can do: ${g.title} — G$ ${g.rewardGd.toLocaleString()}` })
+  // AI: tell the user what their AI jar can now pay for (only when today's claim topped it up)
+  if (daily.claimed > 0n) {
+    const ai = (await snapshot(user)).jars.find((j) => j.kind === 'ai')
+    if (ai && ai.balanceGd >= AI_TOOLS.brainstorm.priceGd) {
+      const briefs = Math.floor(ai.balanceGd / AI_TOOLS.research.priceGd)
+      steps.push({
+        lane: 'ai',
+        text: briefs > 0 ? `AI jar now covers ${briefs} research brief${briefs > 1 ? 's' : ''} (G$ ${Math.floor(ai.balanceGd).toLocaleString()})` : `AI jar can pay for a brainstorm (G$ ${Math.floor(ai.balanceGd).toLocaleString()})`,
+      })
+    }
   }
 
   await updateUser(user.id, { lastRunAt: Date.now() })

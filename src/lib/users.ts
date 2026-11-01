@@ -3,13 +3,18 @@ import type { Row } from '@libsql/client'
 import { run } from './db'
 import { createAgentWallet } from './wallets'
 
-export const JAR_KINDS = ['light', 'data', 'airtime'] as const
+export const JAR_KINDS = ['light', 'data', 'airtime', 'ai'] as const
 export type JarKind = (typeof JAR_KINDS)[number]
+/** Jars that pay a bill through the top-up provider. The AI jar pays for AI helpers instead. */
+export const BILL_KINDS = ['light', 'data', 'airtime'] as const
+export type BillKind = (typeof BILL_KINDS)[number]
+export const isBillKind = (v: unknown): v is BillKind => typeof v === 'string' && (BILL_KINDS as readonly string[]).includes(v)
 
 export const JAR_INFO: Record<JarKind, { label: string; emoji: string; defaultTarget: number }> = {
   light: { label: 'Light', emoji: '💡', defaultTarget: 3000 },
   data: { label: 'Data', emoji: '📶', defaultTarget: 1000 },
   airtime: { label: 'Airtime', emoji: '📞', defaultTarget: 500 },
+  ai: { label: 'AI', emoji: '✨', defaultTarget: 500 },
 }
 
 export function isJarKind(v: unknown): v is JarKind {
@@ -18,7 +23,7 @@ export function isJarKind(v: unknown): v is JarKind {
 
 /** A bill the agent proposed and is waiting for the user to confirm. */
 export interface PendingAction {
-  kind: JarKind
+  kind: BillKind
   amountNgn: number
   phone?: string
   network?: string
@@ -151,7 +156,7 @@ export async function linkTelegram(userId: string, chatId: string) {
 
 // ---------- activity ----------
 
-export type ActivityType = 'claim' | 'deposit' | 'pay' | 'refund' | 'reward' | 'move' | 'work' | 'earn' | 'agent'
+export type ActivityType = 'claim' | 'deposit' | 'pay' | 'refund' | 'reward' | 'move' | 'ai' | 'agent'
 
 export interface Activity {
   id: number

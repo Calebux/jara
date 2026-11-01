@@ -52,28 +52,18 @@ const SCHEMA = [
     created_at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS messages_user_idx ON messages (user_id, id)`,
-  // Gigs: small jobs paid in G$. Funded up front by the poster (or the Jarra treasury).
-  `CREATE TABLE IF NOT EXISTS gigs (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL,
-    reward_gd INTEGER NOT NULL,
-    skills TEXT NOT NULL DEFAULT '[]',
-    city TEXT,
-    poster TEXT NOT NULL,
-    slots INTEGER NOT NULL DEFAULT 1,
-    active INTEGER NOT NULL DEFAULT 1,
+  // AI helper uses, paid in G$.
+  `CREATE TABLE IF NOT EXISTS ai_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users (id),
+    tool TEXT NOT NULL,
+    input TEXT NOT NULL,
+    output TEXT NOT NULL,
+    cost_gd INTEGER NOT NULL,
+    demo INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   )`,
-  `CREATE TABLE IF NOT EXISTS gig_claims (
-    gig_id TEXT NOT NULL REFERENCES gigs (id),
-    user_id TEXT NOT NULL REFERENCES users (id),
-    status TEXT NOT NULL,
-    proof TEXT,
-    score REAL NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (gig_id, user_id)
-  )`,
+  `CREATE INDEX IF NOT EXISTS ai_runs_user_idx ON ai_runs (user_id, id)`,
   // One row per reward a user has received, keyed so each reward pays once per period.
   `CREATE TABLE IF NOT EXISTS rewards_paid (
     user_id TEXT NOT NULL REFERENCES users (id),

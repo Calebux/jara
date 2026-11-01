@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 const WEEK = [
   { day: 'Mon', icon: '☀️', title: 'Claimed G$ for you', body: 'Light jar 40% · Data 80% · Airtime 65%', tone: 'cream' },
   { day: 'Tue', icon: '💬', title: '"Buy 1GB for my mama"', body: 'Sent in 10 seconds. Paid from the Data jar.', tone: 'mandarin' },
-  { day: 'Wed', icon: '🧰', title: 'Found you a gig', body: 'Translate 20 phrases into Hausa — G$ 4,000. Done by evening.', tone: 'cream' },
+  { day: 'Wed', icon: '✨', title: 'Brainstormed your project', body: '8 final-year project ideas in 20 seconds. G$ 150 from your AI jar.', tone: 'cream' },
   { day: 'Thu', icon: '💡', title: 'Light jar hit ₦3,000', body: 'Auto-paid. Meter token sent to your chat.', tone: 'crest' },
   { day: 'Fri', icon: '⭐', title: 'Reward collected', body: 'First bill paid with G$ — +G$ 300 bonus, no forms.', tone: 'cream' },
   { day: 'Sat', icon: '🔥', title: '7-day streak bonus', body: 'Extra G$ dropped in for showing up all week.', tone: 'forest' },
@@ -69,7 +69,7 @@ export default function Home() {
             <div>
               <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
                 Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly works for you. It saves your free GoodDollar,{' '}
-                <span className="text-crest">pays your bills, finds you rewards and finds you paid work</span> — all in G$.
+                <span className="text-crest">pays your bills, finds you rewards</span> — and your G$ pays for AI help with research, assignments and ideas.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <a
@@ -122,7 +122,7 @@ export default function Home() {
               { n: '01', t: 'Saves', d: 'Claims your free G$ every day and splits it into jars for Light, Data and Airtime.', c: 'bg-crest' },
               { n: '02', t: 'Pays', d: 'Knows when each bill comes round, tops the jar up in time and pays — then sends proof.', c: 'bg-mandarin' },
               { n: '03', t: 'Finds rewards', d: 'Streaks, first bills, invites, weekly saving — Jarra spots G$ bonuses and collects them.', c: 'bg-cream' },
-              { n: '04', t: 'Finds work', d: 'Matches small gigs to your skills and city — surveys, translation, photos — paid in G$.', c: 'bg-forest text-cream' },
+              { n: '04', t: 'Powers your AI', d: 'Your G$ pays for AI help: research, assignments, brainstorming, exam practice, CVs and more.', c: 'bg-forest text-cream' },
             ].map((s) => (
               <div key={s.n} className={`press rounded-3xl border-[3px] border-ink p-7 shadow-chunk-lg ${s.c}`}>
                 <p className="text-5xl font-extrabold opacity-90">{s.n}</p>
@@ -153,6 +153,42 @@ export default function Home() {
                 </div>
                 <p className="mt-5 text-xl leading-tight font-extrabold">{w.title}</p>
                 <p className="mt-2 font-medium opacity-80">{w.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* AI */}
+      <section className="grain bg-cream py-20">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
+          <div>
+            <p className="text-sm font-extrabold tracking-widest text-mandarin uppercase">For students &amp; young people</p>
+            <h2 className="mt-3 text-4xl leading-none font-extrabold tracking-tight sm:text-6xl">
+              Your G$ pays for <span className="rounded-xl bg-forest px-2 text-crest">your AI.</span>
+            </h2>
+            <p className="mt-6 max-w-lg text-lg font-medium text-ink/75">
+              No card, no subscription. The G$ you collect every day fills your AI jar, and each time you ask for help, Jarra pays for the AI with it.
+            </p>
+            <p className="mt-3 max-w-lg text-sm font-semibold text-ink/55">For assignments, Jarra helps you understand and plan — you still write it in your own words.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { t: 'Research brief', d: 'Any topic, explained simply', p: 300 },
+              { t: 'Assignment helper', d: 'Understand it, get an outline', p: 250 },
+              { t: 'Brainstorm', d: 'Ideas for projects & topics', p: 150 },
+              { t: 'Exam practice', d: 'WAEC, JAMB, NECO, uni', p: 200 },
+              { t: 'CV & cover letter', d: 'Stand out for jobs', p: 400 },
+              { t: 'Opportunity scout', d: 'Scholarships, internships', p: 300 },
+              { t: 'Side-hustle plan', d: 'Start earning, step by step', p: 300 },
+              { t: 'Content writer', d: 'Captions, posts, bios', p: 100 },
+            ].map((x, i) => (
+              <div key={x.t} className={`press rounded-2xl border-[3px] border-ink p-4 shadow-chunk-sm ${i % 3 === 0 ? 'bg-crest' : i % 3 === 1 ? 'bg-white' : 'bg-mandarin'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="leading-tight font-extrabold">{x.t}</p>
+                  <span className="shrink-0 rounded-lg bg-ink px-2 py-0.5 text-xs font-extrabold text-cream">G$ {x.p}</span>
+                </div>
+                <p className="mt-1.5 text-sm font-semibold opacity-75">{x.d}</p>
               </div>
             ))}
           </div>

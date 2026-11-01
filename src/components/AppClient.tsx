@@ -10,7 +10,7 @@ import { Jar, type JarColor, type JarIcon } from './Jar'
 // ---------- types mirrored from /api/_shared userState ----------
 
 interface JarView {
-  kind: 'light' | 'data' | 'airtime'
+  kind: 'light' | 'data' | 'airtime' | 'ai'
   label: string
   emoji: string
   balanceGd: number
@@ -21,16 +21,6 @@ interface JarView {
   details: { phone?: string; network?: string; disco?: string; meterType?: string; meterNumber?: string; customerName?: string }
   everyDays: number | null
   dueAt: number | null
-}
-interface GigView {
-  id: string
-  title: string
-  description: string
-  rewardGd: number
-  skills: string[]
-  city: string | null
-  poster: string
-  status?: 'suggested' | 'accepted' | 'submitted' | 'paid' | 'dismissed'
 }
 interface Activity {
   id: number
@@ -58,22 +48,21 @@ interface State {
     telegramLinked: boolean
     telegramLink: string | null
     hasPending: boolean
-    skills: string[]
-    city: string | null
     lastRunAt: number | null
     inviteLink: string
   }
-  gigs: GigView[]
+  aiRuns: { id: number; tool: string; input: string; output: string; costGd: number; demo: boolean; createdAt: number }[]
+  aiTools: { id: string; name: string; blurb: string; priceGd: number; placeholder: string }[]
   rewards: { earnedGd: number; items: { title: string; detail: string; amountGd: number; done: boolean; progress: number }[] }
-  options: { skills: Record<string, string>; cities: string[] }
   snapshot: { jars: JarView[]; totalGd: number; freeGd: number; freeNgn: number; ngnPerGd: number }
   activity: Activity[]
   messages: Msg[]
   config: { chainMode: 'celo' | 'mock'; provider: string; llm: string }
 }
 
-const JAR_COLOR: Record<JarView['kind'], JarColor> = { light: 'crest', data: 'mandarin', airtime: 'forest' }
-const JAR_ICON: Record<JarView['kind'], JarIcon> = { light: 'bolt', data: 'signal', airtime: 'phone' }
+const JAR_COLOR: Record<JarView['kind'], JarColor> = { light: 'crest', data: 'mandarin', airtime: 'forest', ai: 'mandarin' }
+const JAR_ICON: Record<JarView['kind'], JarIcon> = { light: 'bolt', data: 'signal', airtime: 'phone', ai: 'spark' }
+const JAR_LID: Record<JarView['kind'], string> = { light: '#ffc72c', data: '#ffc72c', airtime: '#ff6b00', ai: '#1d5a3f' }
 const IDENTITY = '0xC361A6E67822a0EDc17D899227dd9FC50BD62F42'
 const CONNECT_ABI = [
   { type: 'function', name: 'connectAccount', stateMutability: 'nonpayable', inputs: [{ name: 'account', type: 'address' }], outputs: [] },
@@ -378,13 +367,13 @@ function greeting() {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
 
-type Lane = 'save' | 'pay' | 'rewards' | 'work'
-const LANE_OF: Record<string, Lane | null> = { claim: 'save', deposit: 'save', move: 'save', pay: 'pay', refund: 'pay', reward: 'rewards', work: 'work', earn: 'work', agent: null }
+type Lane = 'save' | 'pay' | 'rewards' | 'ai'
+const LANE_OF: Record<string, Lane | null> = { claim: 'save', deposit: 'save', move: 'save', pay: 'pay', refund: 'pay', reward: 'rewards', ai: 'ai', agent: null }
 const LANES: { id: Lane; label: string; verb: string; color: string; ink: string }[] = [
   { id: 'save', label: 'Saving', verb: 'Claims your G$ daily', color: 'bg-crest', ink: 'text-ink' },
   { id: 'pay', label: 'Paying', verb: 'Pays bills when due', color: 'bg-mandarin', ink: 'text-ink' },
   { id: 'rewards', label: 'Rewards', verb: 'Hunts G$ bonuses', color: 'bg-cream', ink: 'text-ink' },
-  { id: 'work', label: 'Work', verb: 'Finds gigs paid in G$', color: 'bg-forest-soft', ink: 'text-cream' },
+  { id: 'ai', label: 'AI', verb: 'Your G$ pays for AI help', color: 'bg-forest-soft', ink: 'text-cream' },
 ]
 
 function ago(ts: number | null) {
@@ -399,7 +388,6 @@ function ago(ts: number | null) {
 function Dashboard({ state, setState, flash }: { state: State; setState: (s: State) => void; flash: (t: string) => void }) {
   const [tab, setTab] = useState<'home' | 'work' | 'chat'>('home')
   const [editing, setEditing] = useState<JarView | null>(null)
-  const [profileOpen, setProfileOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [lastSteps, setLastSteps] = useState<{ lane: Lane; text: string }[] | null>(null)
   const { snapshot: snap } = state
@@ -431,7 +419,7 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
       <div className="mb-4 grid grid-cols-3 rounded-full bg-forest/10 p-1 lg:hidden">
         {(['home', 'work', 'chat'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`rounded-full py-2.5 text-sm font-extrabold transition ${tab === t ? 'bg-forest text-cream shadow' : 'text-forest'}`}>
-            {t === 'home' ? 'Agent' : t === 'work' ? 'Work & rewards' : 'Chat'}
+            {t === 'home' ? 'Agent' : t === 'work' ? 'AI & rewards' : 'Chat'}
           </button>
         ))}
       </div>
@@ -443,7 +431,7 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
             <JarShelf jars={snap.jars} onEdit={setEditing} totalGd={snap.totalGd} rate={snap.ngnPerGd} />
           </div>
           <div className={show('work')}>
-            <WorkSection state={state} setState={setState} flash={flash} onProfile={() => setProfileOpen(true)} />
+            <AiStudio state={state} setState={setState} flash={flash} />
             <RewardsCard state={state} flash={flash} />
           </div>
           <div className={show('home')}>
@@ -478,21 +466,6 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
           }}
         />
       )}
-      {profileOpen && (
-        <ProfileSheet
-          state={state}
-          onClose={() => setProfileOpen(false)}
-          onSave={async (p) => {
-            try {
-              setState(await api<State>('/api/profile', p))
-              setProfileOpen(false)
-              flash('Saved — Jarra will look for work that fits you')
-            } catch (err) {
-              flash(err instanceof Error ? err.message : 'Could not save')
-            }
-          }}
-        />
-      )}
     </main>
   )
 }
@@ -503,9 +476,9 @@ function AgentPanel({ state, busy, onRun, lastSteps }: { state: State; busy: boo
   const week = now - 7 * 86_400_000
   const recent = state.activity.filter((a) => a.createdAt > week && a.status !== 'failed')
   const earnedGd = recent
-    .filter((a) => ['claim', 'reward', 'earn', 'deposit'].includes(a.type) && a.amountWei)
+    .filter((a) => ['claim', 'reward', 'deposit'].includes(a.type) && a.amountWei)
     .reduce((s, a) => s + Number(BigInt(a.amountWei!) / 10n ** 18n), 0)
-  const spentGd = recent.filter((a) => a.type === 'pay' && a.amountWei).reduce((s, a) => s + Number(BigInt(a.amountWei!) / 10n ** 18n), 0)
+  const spentGd = recent.filter((a) => (a.type === 'pay' || a.type === 'ai') && a.amountWei).reduce((s, a) => s + Number(BigInt(a.amountWei!) / 10n ** 18n), 0)
 
   return (
     <section className="overflow-hidden rounded-[2rem] border-[4px] border-ink bg-forest text-cream shadow-chunk-lg">
@@ -557,7 +530,7 @@ function AgentPanel({ state, busy, onRun, lastSteps }: { state: State; busy: boo
           <ul className="mt-2 grid gap-1.5">
             {lastSteps.map((st, i) => (
               <li key={i} className="flex items-start gap-2.5 text-sm font-bold">
-                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${st.lane === 'save' ? 'bg-crest' : st.lane === 'pay' ? 'bg-mandarin' : st.lane === 'work' ? 'bg-forest' : 'bg-ink'}`} />
+                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${st.lane === 'save' ? 'bg-crest' : st.lane === 'pay' ? 'bg-mandarin' : st.lane === 'ai' ? 'bg-forest' : 'bg-ink'}`} />
                 <span>{st.text}</span>
               </li>
             ))}
@@ -567,7 +540,7 @@ function AgentPanel({ state, busy, onRun, lastSteps }: { state: State; busy: boo
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t-[4px] border-ink bg-forest-deep px-6 py-3 text-sm font-bold sm:px-8">
         <span className="text-crest">+G$ {gdFmt(earnedGd)} in this week</span>
-        <span className="text-cream/70">−G$ {gdFmt(spentGd)} on bills</span>
+        <span className="text-cream/70">−G$ {gdFmt(spentGd)} on bills & AI</span>
         <span className="text-cream/70">🔥 {user.streak}-day streak</span>
         <span className="text-cream">{formatNgn(Math.floor(snap.totalGd * snap.ngnPerGd))} saved</span>
       </div>
@@ -584,23 +557,24 @@ function JarShelf({ jars, onEdit, totalGd, rate }: { jars: JarView[]; onEdit: (j
           G$ {gdFmt(totalGd)} · {formatNgn(Math.floor(totalGd * rate))}
         </p>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-3 sm:gap-5">
+      <div className="mt-4 grid grid-cols-4 gap-2 sm:gap-4">
         {jars.map((j) => (
           <button key={j.kind} onClick={() => onEdit(j)} className="group text-left">
             <div className="flex justify-center">
               <Jar
                 pct={j.pct}
                 color={JAR_COLOR[j.kind]}
-                lid={j.kind === 'airtime' ? '#ff6b00' : '#ffc72c'}
-                className="h-28 transition group-hover:-translate-y-1 sm:h-32"
+                lid={JAR_LID[j.kind]}
+                className="h-24 transition group-hover:-translate-y-1 sm:h-32"
                 label={{ icon: JAR_ICON[j.kind], text: j.label }}
               />
             </div>
             <p className="mt-2 text-sm font-extrabold">
-              {formatNgn(j.balanceNgn)} <span className="font-bold text-ink/45">/ {formatNgn(j.targetNgn)}</span>
+              {j.kind === 'ai' ? `G$ ${gdFmt(j.balanceGd)}` : formatNgn(j.balanceNgn)}{' '}
+              <span className="hidden font-bold text-ink/45 sm:inline">/ {formatNgn(j.targetNgn)}</span>
             </p>
             <p className="text-xs font-bold text-ink/50">
-              {j.dueAt ? `Due ${new Date(j.dueAt).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric' })}` : j.everyDays ? `Every ${j.everyDays} days` : j.autoPay ? 'Auto-pays when full' : 'Tap to set up'}
+              {j.kind === 'ai' ? 'Pays for AI help' : j.dueAt ? `Due ${new Date(j.dueAt).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric' })}` : j.everyDays ? `Every ${j.everyDays} days` : j.autoPay ? 'Auto-pays when full' : 'Tap to set up'}
             </p>
           </button>
         ))}
@@ -609,117 +583,112 @@ function JarShelf({ jars, onEdit, totalGd, rate }: { jars: JarView[]; onEdit: (j
   )
 }
 
-function WorkSection({ state, setState, flash, onProfile }: { state: State; setState: (s: State) => void; flash: (t: string) => void; onProfile: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null)
-  const [proofFor, setProofFor] = useState<string | null>(null)
-  const [proof, setProof] = useState('')
-  const open = state.gigs.filter((g) => g.status !== 'paid')
-  const paid = state.gigs.filter((g) => g.status === 'paid')
-  const skills = state.user.skills.map((s) => state.options.skills[s] ?? s)
+function AiStudio({ state, setState, flash }: { state: State; setState: (s: State) => void; flash: (t: string) => void }) {
+  const [toolId, setToolId] = useState<string>(state.aiTools[0]?.id ?? 'research')
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ tool: string; input: string; output: string; costGd: number; demo: boolean } | null>(null)
+  const tool = state.aiTools.find((t) => t.id === toolId) ?? state.aiTools[0]
+  const aiJar = state.snapshot.jars.find((j) => j.kind === 'ai')
+  const canAfford = state.snapshot.totalGd >= tool.priceGd
 
-  const act = async (gigId: string, action: 'accept' | 'dismiss' | 'submit', extra?: Record<string, string>) => {
-    setBusy(gigId + action)
+  const ask = async () => {
+    setBusy(true)
     try {
-      const r = await api<{ message: string; state: State }>('/api/gigs', { gigId, action, ...extra })
+      const r = await api<{ output: string; costGd: number; demo: boolean; state: State }>('/api/ai', { tool: tool.id, input })
       setState(r.state)
-      if (r.message) flash(r.message.split('.')[0])
-      setProofFor(null)
-      setProof('')
+      setResult({ tool: tool.name, input, output: r.output, costGd: r.costGd, demo: r.demo })
+      flash(r.demo ? 'Demo preview — not charged' : `Done · G$ ${gdFmt(r.costGd)} from your AI jar`)
     } catch (err) {
       flash(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
   return (
-    <section className="rounded-[2rem] border-[4px] border-ink bg-crest p-5 shadow-chunk sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="overflow-hidden rounded-[2rem] border-[4px] border-ink bg-white shadow-chunk">
+      <div className="flex flex-wrap items-end justify-between gap-3 bg-mandarin px-5 py-5 sm:px-6">
         <div>
-          <h2 className="text-2xl font-extrabold">Work Jarra found you</h2>
-          <p className="mt-1 text-sm font-semibold text-ink/65">Small jobs that pay G$ straight into your jars.</p>
+          <h2 className="text-2xl leading-tight font-extrabold">AI helpers, paid with your G$</h2>
+          <p className="mt-1 text-sm font-semibold text-ink/70">Research, assignments, brainstorming and more. Your G$ funds the AI.</p>
         </div>
-        <button onClick={onProfile} className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream hover:bg-forest">
-          {skills.length ? 'Edit my skills' : 'Tell Jarra what you can do'}
-        </button>
+        <div className="rounded-2xl border-[3px] border-ink bg-cream px-3 py-2 text-right">
+          <p className="text-[11px] font-extrabold tracking-widest text-ink/50 uppercase">AI jar</p>
+          <p className="leading-none font-extrabold">G$ {gdFmt(aiJar?.balanceGd ?? 0)}</p>
+        </div>
       </div>
-      {skills.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {skills.map((s) => (
-            <span key={s} className="rounded-full bg-cream/70 px-2.5 py-0.5 text-xs font-bold">
-              {s}
-            </span>
-          ))}
-          {state.user.city && <span className="rounded-full bg-cream/70 px-2.5 py-0.5 text-xs font-bold">📍 {state.user.city}</span>}
-        </div>
-      )}
 
-      <div className="mt-4 grid gap-3">
-        {open.length === 0 && (
-          <p className="rounded-2xl bg-cream/70 p-5 text-center font-semibold text-ink/60">
-            {skills.length ? 'Nothing new right now — Jarra checks again every few hours.' : 'Add your skills and city and Jarra will start finding paid work for you.'}
-          </p>
-        )}
-        {open.map((g) => (
-          <div key={g.id} className="rounded-2xl border-[3px] border-ink bg-cream p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="leading-snug font-extrabold">{g.title}</p>
-                <p className="mt-1 text-sm font-medium text-ink/60">{g.description}</p>
-                <p className="mt-1.5 text-xs font-bold text-ink/45">
-                  {g.poster}
-                  {g.city ? ` · ${g.city}` : ' · Remote'}
-                </p>
-              </div>
-              <span className="shrink-0 rounded-xl bg-forest px-2.5 py-1.5 text-sm font-extrabold whitespace-nowrap text-cream">G$ {gdFmt(g.rewardGd)}</span>
-            </div>
-            {proofFor === g.id ? (
-              <form
-                className="mt-3 flex gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  act(g.id, 'submit', { proof })
-                }}
-              >
-                <input
-                  autoFocus
-                  value={proof}
-                  onChange={(e) => setProof(e.target.value)}
-                  placeholder="What did you do? Paste a link or note"
-                  className="min-w-0 flex-1 rounded-xl border-2 border-ink/15 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-ink"
-                />
-                <button disabled={!!busy} className="rounded-xl bg-mandarin px-4 text-sm font-extrabold">
-                  Send
-                </button>
-              </form>
-            ) : (
-              <div className="mt-3 flex gap-2">
-                {g.status === 'suggested' && (
-                  <>
-                    <button onClick={() => act(g.id, 'accept')} disabled={!!busy} className="press rounded-xl border-[3px] border-ink bg-mandarin px-4 py-2 text-sm font-extrabold shadow-chunk-sm">
-                      Take this gig
-                    </button>
-                    <button onClick={() => act(g.id, 'dismiss')} disabled={!!busy} className="rounded-xl px-3 py-2 text-sm font-bold text-ink/55 hover:text-ink">
-                      Not for me
-                    </button>
-                  </>
-                )}
-                {g.status === 'accepted' && (
-                  <button onClick={() => setProofFor(g.id)} className="press rounded-xl border-[3px] border-ink bg-forest px-4 py-2 text-sm font-extrabold text-cream shadow-chunk-sm">
-                    I’ve done it →
-                  </button>
-                )}
-                {g.status === 'submitted' && <span className="text-sm font-bold text-forest">Waiting for {g.poster} to approve…</span>}
-              </div>
-            )}
-          </div>
+      <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4 sm:p-5">
+        {state.aiTools.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => {
+              setToolId(t.id)
+              setResult(null)
+            }}
+            className={`rounded-2xl p-3 text-left transition ${t.id === tool.id ? 'bg-forest text-cream' : 'bg-cream ring-2 ring-ink/10 hover:ring-ink/30'}`}
+          >
+            <p className="text-sm leading-tight font-extrabold">{t.name}</p>
+            <p className={`mt-1 text-xs font-bold ${t.id === tool.id ? 'text-crest' : 'text-ink/50'}`}>G$ {gdFmt(t.priceGd)}</p>
+          </button>
         ))}
       </div>
-      {paid.length > 0 && (
-        <p className="mt-3 text-sm font-bold text-ink/70">
-          ✓ {paid.length} gig{paid.length > 1 ? 's' : ''} done · G$ {gdFmt(paid.reduce((s, g) => s + g.rewardGd, 0))} earned
-        </p>
-      )}
+
+      <div className="border-t-2 border-ink/10 px-4 pt-4 pb-5 sm:px-5">
+        <p className="text-sm font-semibold text-ink/65">{tool.blurb}</p>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={tool.placeholder}
+          rows={3}
+          className="mt-3 w-full resize-none rounded-2xl border-2 border-ink/15 bg-cream/50 px-4 py-3 font-semibold outline-none focus:border-ink"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            onClick={ask}
+            disabled={busy || input.trim().length < 3 || !canAfford}
+            className="press rounded-2xl border-[3px] border-ink bg-mandarin px-5 py-3 font-extrabold shadow-chunk-sm disabled:opacity-50"
+          >
+            {busy ? 'Thinking…' : `Ask · G$ ${gdFmt(tool.priceGd)}`}
+          </button>
+          <p className="text-xs font-semibold text-ink/50">{canAfford ? 'Only charged when you get an answer.' : 'Not enough G$ yet — your jars fill every day.'}</p>
+        </div>
+
+        {result && (
+          <div className="animate-pop mt-5 overflow-hidden rounded-2xl border-[3px] border-ink">
+            <div className="flex items-center justify-between gap-2 bg-crest px-4 py-2">
+              <p className="truncate text-sm font-extrabold">{result.tool}</p>
+              <button
+                onClick={() => navigator.clipboard?.writeText(result.output).then(() => flash('Copied'), () => undefined)}
+                className="shrink-0 rounded-full bg-ink px-3 py-1 text-xs font-bold text-cream"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="max-h-[420px] overflow-y-auto bg-white px-4 py-3 text-[15px] leading-relaxed font-medium whitespace-pre-wrap">{result.output}</div>
+          </div>
+        )}
+
+        {!result && state.aiRuns.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-extrabold tracking-widest text-ink/45 uppercase">Recent</p>
+            <ul className="grid gap-1.5">
+              {state.aiRuns.slice(0, 4).map((r) => (
+                <li key={r.id}>
+                  <button
+                    onClick={() => setResult({ tool: state.aiTools.find((t) => t.id === r.tool)?.name ?? r.tool, input: r.input, output: r.output, costGd: r.costGd, demo: r.demo })}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl bg-cream/60 px-3 py-2 text-left text-sm hover:bg-cream"
+                  >
+                    <span className="truncate font-bold">{r.input}</span>
+                    <span className="shrink-0 text-xs font-bold text-ink/45">{r.demo ? 'demo' : `G$ ${gdFmt(r.costGd)}`}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </section>
   )
 }
@@ -765,62 +734,6 @@ function RewardsCard({ state, flash }: { state: State; flash: (t: string) => voi
         Copy my invite link
       </button>
     </section>
-  )
-}
-
-function ProfileSheet({ state, onClose, onSave }: { state: State; onClose: () => void; onSave: (p: { skills: string[]; city: string }) => Promise<void> }) {
-  const [skills, setSkills] = useState<string[]>(state.user.skills)
-  const [city, setCity] = useState(state.user.city ?? '')
-  const [saving, setSaving] = useState(false)
-  const toggle = (s: string) => setSkills((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="animate-pop max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[2rem] bg-cream sm:rounded-[2rem] sm:border-[4px] sm:border-ink sm:shadow-chunk-lg">
-        <div className="flex items-center justify-between bg-crest px-6 py-5">
-          <div>
-            <h3 className="text-2xl font-extrabold">What can you do?</h3>
-            <p className="text-sm font-semibold text-ink/65">Jarra uses this to find you gigs paid in G$.</p>
-          </div>
-          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-ink/10 font-bold hover:bg-ink/20" aria-label="Close">
-            ✕
-          </button>
-        </div>
-        <div className="grid gap-5 p-6">
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(state.options.skills).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => toggle(id)}
-                className={`rounded-full px-3.5 py-2 text-sm font-bold transition ${skills.includes(id) ? 'bg-forest text-cream' : 'bg-white ring-2 ring-ink/10 hover:ring-ink/30'}`}
-              >
-                {skills.includes(id) ? '✓ ' : ''}
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="grid gap-2">
-            <span className="text-sm font-extrabold tracking-wide text-ink/60 uppercase">Your city</span>
-            <select value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-3 font-semibold outline-none focus:border-ink">
-              <option value="">Anywhere / remote only</option>
-              {state.options.cities.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </label>
-          <button
-            disabled={saving}
-            onClick={async () => {
-              setSaving(true)
-              await onSave({ skills, city })
-              setSaving(false)
-            }}
-            className="press w-full rounded-2xl border-[3px] border-ink bg-mandarin py-4 text-lg font-extrabold shadow-chunk disabled:opacity-60"
-          >
-            {saving ? 'Saving…' : 'Find me work'}
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -892,7 +805,7 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="animate-pop max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[2rem] bg-cream sm:rounded-[2rem] sm:border-[4px] sm:border-ink sm:shadow-chunk-lg">
         <div className="flex items-center gap-4 bg-forest px-6 py-5 text-cream">
-          <Jar pct={jar.pct} color={JAR_COLOR[jar.kind]} lid={jar.kind === 'airtime' ? '#ff6b00' : '#ffc72c'} className="h-16 w-12" />
+          <Jar pct={jar.pct} color={JAR_COLOR[jar.kind]} lid={JAR_LID[jar.kind]} className="h-16 w-12" />
           <div className="flex-1">
             <h3 className="text-2xl font-extrabold">{jar.label} jar</h3>
             <p className="text-sm font-semibold text-cream/60">
@@ -920,7 +833,11 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
             </div>
           </div>
 
-          {jar.kind === 'light' ? (
+          {jar.kind === 'ai' ? (
+            <p className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-ink/65 ring-2 ring-ink/10">
+              This jar pays for your AI helpers — research, assignment help, brainstorming, exam practice and more. Jarra fills it from your daily G$.
+            </p>
+          ) : jar.kind === 'light' ? (
             <div className="grid gap-3">
               <p className="text-sm font-extrabold tracking-wide text-ink/60 uppercase">Your meter</p>
               <select value={disco} onChange={(e) => setDisco(e.target.value)} className={field}>
@@ -947,6 +864,8 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
             </div>
           )}
 
+          {jar.kind !== 'ai' && (
+          <>
           <div>
             <p className="mb-2 text-sm font-extrabold tracking-wide text-ink/60 uppercase">This bill comes round</p>
             <div className="grid grid-cols-4 gap-2">
@@ -972,13 +891,17 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
               <span className={`absolute top-1 h-5 w-5 rounded-full bg-cream shadow transition-all ${autoPay ? 'left-6' : 'left-1'}`} />
             </span>
           </button>
+          </>
+          )}
 
           <button
             disabled={saving}
             onClick={async () => {
               setSaving(true)
               await onSave(
-                jar.kind === 'light'
+                jar.kind === 'ai'
+                  ? { targetNgn: target }
+                  : jar.kind === 'light'
                   ? { targetNgn: target, autoPay, everyDays: every, disco, meterType, meterNumber: meter || undefined }
                   : { targetNgn: target, autoPay, everyDays: every, phone: phone || undefined },
               )
@@ -1001,8 +924,7 @@ const ACT_STYLE: Record<string, { icon: string; tint: string; sign: '+' | '−' 
   refund: { icon: '↩', tint: 'bg-crest-soft', sign: '+' },
   pay: { icon: '✓', tint: 'bg-mandarin', sign: '−' },
   move: { icon: '→', tint: 'bg-cream', sign: '' },
-  work: { icon: '⌕', tint: 'bg-forest-soft text-cream', sign: '' },
-  earn: { icon: '₲', tint: 'bg-forest text-cream', sign: '+' },
+  ai: { icon: '✦', tint: 'bg-forest-soft text-cream', sign: '−' },
   agent: { icon: '🫙', tint: 'bg-ink text-cream', sign: '' },
 }
 
@@ -1061,7 +983,7 @@ function TelegramChip({ state }: { state: State }) {
 
 // ---------- chat ----------
 
-const CHIPS = ['Find me work', '₦200 airtime for me', 'My rewards', 'What’s in my jars?', 'Buy ₦3000 light']
+const CHIPS = ['Help me brainstorm a project', '₦200 airtime for me', 'My rewards', 'What’s in my jars?', 'Buy ₦3000 light']
 
 function Chat({ state, setState, flash }: { state: State; setState: (s: State) => void; flash: (t: string) => void }) {
   const [text, setText] = useState('')
@@ -1110,7 +1032,7 @@ function Chat({ state, setState, flash }: { state: State; setState: (s: State) =
         {state.messages.length === 0 && !optimistic && (
           <ChatBubble
             me={false}
-            text={`Hi${state.user.name ? ` ${state.user.name}` : ''}! I’m your AI agent. I save your G$, pay your bills, find you rewards and paid work. Ask me anything — I’ll always show you before I pay.`}
+            text={`Hi${state.user.name ? ` ${state.user.name}` : ''}! I’m your AI agent. I save your G$, pay your bills, find you rewards — and your G$ pays for AI help with research, assignments and ideas. Ask me anything — I’ll always show you before I pay.`}
           />
         )}
         {state.messages.map((m) => (

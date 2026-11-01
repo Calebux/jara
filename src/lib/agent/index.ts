@@ -6,11 +6,11 @@ import { serverConfig } from '../env'
 import { moveToJar, snapshot, syncJars, updateJar, type Snapshot } from '../jars'
 import { gdForNgn } from '../price'
 import { runDaily } from '../daily'
-import { getUserById, isJarKind, listActivity, updateUser, type JarKind, type PendingAction, type User } from '../users'
+import { getUserById, isBillKind, isJarKind, listActivity, updateUser, type JarKind, type PendingAction, type User } from '../users'
 import { chat, llmReachable, type ChatMessage, type ToolDef } from './llm'
 import { fallbackIntent } from './fallback'
 import { runAgent } from './routine'
-import { CITIES, SKILLS, acceptGig, isSkill, matchGigs, submitGig, userGigs } from '../gigs'
+import { AI_TOOLS, isAiTool, runAiTool } from '../ai-tools'
 import { rewardProgress } from '../rewards'
 
 export interface AgentReply {
@@ -91,38 +91,21 @@ const TOOLS: ToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'find_work',
-      description: 'Small jobs paid in G$ that Jarra found for the user (and searches for new ones). Returns id, title, pay, status.',
+      name: 'ai_helpers',
+      description: 'List the AI helpers the user can pay for with G$ (research, assignment help, brainstorm, exam practice, CV, opportunities, side-hustle plan, content) and their prices.',
       parameters: { type: 'object', properties: {} },
     },
   },
   {
     type: 'function',
     function: {
-      name: 'accept_gig',
-      description: 'User wants to take a gig.',
-      parameters: { type: 'object', properties: { gig_id: { type: 'string' } }, required: ['gig_id'] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'finish_gig',
-      description: 'User says they finished an accepted gig; include what they did as proof.',
-      parameters: { type: 'object', properties: { gig_id: { type: 'string' }, proof: { type: 'string' } }, required: ['gig_id'] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'set_profile',
-      description: 'Save what the user can do and where they live, so Jarra can find them paid work.',
+      name: 'use_ai_helper',
+      description:
+        'Run an AI helper and pay its G$ price from the AI jar. Only call when the user clearly asked for it AND knows the price (tell them the price first if they have not agreed). Returns the answer to show the user in full.',
       parameters: {
         type: 'object',
-        properties: {
-          skills: { type: 'array', items: { type: 'string', enum: Object.keys(SKILLS) } },
-          city: { type: 'string', enum: [...CITIES] },
-        },
+        properties: { tool: { type: 'string', enum: Object.keys(AI_TOOLS) }, input: { type: 'string', description: 'The topic, question or details' } },
+        required: ['tool', 'input'],
       },
     },
   },
@@ -151,13 +134,13 @@ function systemPrompt(user: User, snap: Snapshot): string {
   return [
     'You are Jarra, an AI agent for everyday life in Nigeria. G$ (GoodDollar) drives everything you do.',
     'You quietly handle four jobs: SAVE (claim free daily G$ into jars: Light, Data, Airtime), PAY (bills from the jars),',
-    'find REWARDS (G$ bonuses) and find WORK (small gigs paid in G$, matched to the user\'s skills and city).',
+    'find REWARDS (G$ bonuses), and POWER THEIR AI: the user pays for AI helpers (research, assignment help, brainstorming, exam practice, CV, opportunities, side-hustle plans, content) with G$ from their AI jar.',
+    'For assignments, help them understand and plan — never write the whole thing for them.',
     'Talk like a warm Nigerian friend: short, simple English; understand Pidgin and reply in Pidgin if the user writes Pidgin.',
     'Never use crypto jargon (no "wallet", "token", "gas", "blockchain") unless the user asks. Say "your jar" and "G$".',
     'Always use propose_bill for payments — never claim something is paid until the system confirms it.',
     'After propose_bill succeeds, ask the user to confirm in one short line.',
     'Keep replies under 60 words. Use naira amounts.',
-    `Skills: ${user.skills.join(', ') || 'unknown'}. City: ${user.city ?? 'unknown'}.`,
     `User: ${user.name ?? 'friend'}. Streak: ${user.streak} days. Jars: ${jars}. Free: ${formatNgn(snap.freeNgn)}. 1 G$ = ₦${snap.ngnPerGd.toFixed(4)}.`,
   ].join(' ')
 }
@@ -179,7 +162,7 @@ export async function listMessages(userId: string) {
 // ---------- tool implementations ----------
 
 async function propose(user: User, args: Record<string, unknown>): Promise<{ text: string; confirm?: AgentReply['confirm'] }> {
-  if (!isJarKind(args.kind)) return { text: 'error: kind must be airtime, data or light' }
+  if (!isBillKind(args.kind)) return { text: 'error: kind must be airtime, data or light' }
   const prepared = await prepareBill(user, {
     kind: args.kind,
     amountNgn: Number(args.amount_ngn ?? (args.kind === 'data' ? 20_000 : 0)),
@@ -234,23 +217,13 @@ async function executeTool(user: User, name: string, args: Record<string, unknow
       const r = await runDaily(fresh)
       return r.claimed > 0n ? r.message : 'already claimed today; next claim tomorrow'
     }
-    case 'find_work': {
+    case 'ai_helpers':
+      return JSON.stringify(Object.entries(AI_TOOLS).map(([id, t]) => ({ id, name: t.name, price_gd: t.priceGd, what: t.blurb })))
+    case 'use_ai_helper': {
+      if (!isAiTool(args.tool)) return 'error: unknown helper'
       const fresh = (await getUserById(user.id))!
-      await matchGigs(fresh)
-      const gigs = (await userGigs(user.id)).filter((g) => g.status !== 'paid')
-      return gigs.length
-        ? JSON.stringify(gigs.map((g) => ({ id: g.id, title: g.title, pays_gd: g.rewardGd, status: g.status, by: g.poster })))
-        : 'no gigs matched yet — ask the user what they can do (skills) and their city, then call set_profile'
-    }
-    case 'accept_gig':
-      return acceptGig(user, String(args.gig_id ?? ''))
-    case 'finish_gig':
-      return submitGig(user, String(args.gig_id ?? ''), String(args.proof ?? 'Done'))
-    case 'set_profile': {
-      const skills = Array.isArray(args.skills) ? args.skills.filter(isSkill) : user.skills
-      const city = typeof args.city === 'string' && (CITIES as readonly string[]).includes(args.city) ? args.city : user.city
-      await updateUser(user.id, { skills, city })
-      return `saved skills: ${skills.join(', ') || 'none'}; city: ${city ?? 'not set'}`
+      const r = await runAiTool(fresh, args.tool, String(args.input ?? ''))
+      return r.ok ? `${r.demo ? '(demo preview, not charged) ' : `(charged G$ ${r.costGd}) `}${r.output}` : `error: ${r.message}`
     }
     case 'my_rewards':
       return JSON.stringify(await rewardProgress(user))
@@ -349,11 +322,9 @@ async function rulesRespond(user: User, text: string, snap: Snapshot): Promise<A
       const t = await executeTool(user, 'claim_now', {}, out)
       return { text: t.replace(/^error: /, ''), engine: 'rules' }
     }
-    case 'work': {
-      const t = await executeTool(user, 'find_work', {}, out)
-      if (t.startsWith('no gigs')) return { text: 'Tell me what you can do so I can find you paid work — e.g. "I can type and speak Hausa, I live in Kaduna". Or set it in the Work tab.', engine: 'rules' }
-      const gigs = JSON.parse(t) as { title: string; pays_gd: number; status: string }[]
-      return { text: `Work I found for you:\n${gigs.map((g) => `• ${g.title} — G$ ${g.pays_gd.toLocaleString()}${g.status === 'accepted' ? ' (in progress)' : ''}`).join('\n')}\n\nOpen the Work tab to take one.`, engine: 'rules' }
+    case 'ai': {
+      const list = Object.values(AI_TOOLS).map((t) => `• ${t.name} — G$ ${t.priceGd}`).join('\n')
+      return { text: `Your G$ can pay for AI help:\n${list}\n\nOpen “AI helpers” in the app, pick one and type your topic. It’s paid from your AI jar.`, engine: 'rules' }
     }
     case 'rewards': {
       const p = await rewardProgress(user)
@@ -371,7 +342,7 @@ async function rulesRespond(user: User, text: string, snap: Snapshot): Promise<A
       const light = snap.jars.find((j) => j.kind === 'light')
       const disco = light && isDisco(light.details.disco) ? ` (${DISCO_INFO[light.details.disco].short})` : ''
       return {
-        text: `I save your G$, pay airtime, data and light${disco}, find rewards and find you paid work. Try:\n• "₦500 airtime to 0803 123 4567"\n• "1GB data for me"\n• "Buy ₦3000 light"\n• "Find me work"\n• "My rewards"`,
+        text: `I save your G$, pay airtime, data and light${disco}, find rewards, and your G$ pays for AI help (research, assignments, brainstorming). Try:\n• "₦500 airtime to 0803 123 4567"\n• "1GB data for me"\n• "Buy ₦3000 light"\n• "Help me research inflation"\n• "My rewards"`,
         engine: 'rules',
       }
     }

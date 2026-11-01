@@ -10,11 +10,18 @@ const FILLS = {
 } as const
 
 export type JarColor = keyof typeof FILLS
-export type JarIcon = 'bolt' | 'signal' | 'phone'
+export type JarIcon = 'bolt' | 'signal' | 'phone' | 'spark'
 
 // 24x24 icons drawn in the jar label.
 function LabelIcon({ icon }: { icon: JarIcon }) {
   if (icon === 'bolt') return <path d="M13.5 1.5 4 13.5h7l-1.5 9L19 10.5h-7z" fill="#ff6b00" stroke="#0b1f16" strokeWidth="2.4" strokeLinejoin="round" />
+  if (icon === 'spark')
+    return (
+      <g stroke="#0b1f16" strokeWidth="2.2" strokeLinejoin="round">
+        <path d="M10 2.5 12.2 9l6.3 2.2-6.3 2.3L10 20l-2.2-6.5L1.5 11.2 7.8 9z" fill="#ff6b00" />
+        <path d="M19 1.5l1 2.6 2.5 1-2.5 1-1 2.6-1-2.6-2.5-1 2.5-1z" fill="#ffc72c" strokeWidth="1.6" />
+      </g>
+    )
   if (icon === 'signal')
     return (
       <g fill="#0b1f16">
