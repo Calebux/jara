@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createWalletClient, custom, type EIP1193Provider } from 'viem'
 import { celo } from 'viem/chains'
 import { DISCOS, DISCO_INFO, formatNgn } from '@/lib/catalog'
+import { Icon, type IconName } from './Icon'
 import { Jar, type JarColor, type JarIcon } from './Jar'
 
 // ---------- types mirrored from /api/_shared userState ----------
@@ -130,7 +131,7 @@ function TopBar({ state }: { state: State | null }) {
     <header className="border-b-[3px] border-ink bg-forest">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2 text-cream">
-          <span className="grid h-9 w-9 place-items-center rounded-xl border-[3px] border-ink bg-crest text-lg shadow-chunk-sm">🫙</span>
+          <span className="grid h-9 w-9 place-items-center rounded-xl border-[3px] border-ink bg-crest text-ink shadow-chunk-sm"><Icon name="jar" className="h-5 w-5" /></span>
           <span className="text-xl font-extrabold">Jarra</span>
         </Link>
         <div className="flex items-center gap-3">
@@ -306,7 +307,7 @@ function Onboarding({ state, setState, flash }: { state: State; setState: (s: St
             </a>
           </div>
         ) : (
-          <p className="font-mono text-sm font-bold">{short(state.user.rootAddress ?? '')} ✓</p>
+          <p className="font-mono text-sm font-bold">{short(state.user.rootAddress ?? '')} <Icon name="check" className="inline h-4 w-4 text-forest" strokeWidth={3} /></p>
         )}
       </Step>
 
@@ -351,7 +352,7 @@ function Step({ n, title, done, active, children }: { n: number; title: string; 
     >
       <div className="mb-3 flex items-center gap-3">
         <span className={`grid h-9 w-9 place-items-center rounded-full border-[3px] border-ink font-extrabold ${done ? 'bg-forest text-cream' : 'bg-crest'}`}>
-          {done ? '✓' : n}
+          {done ? <Icon name="check" className="h-4 w-4" strokeWidth={3} /> : n}
         </span>
         <h2 className="text-xl font-extrabold">{title}</h2>
       </div>
@@ -541,7 +542,7 @@ function AgentPanel({ state, busy, onRun, lastSteps }: { state: State; busy: boo
       <div className="flex flex-wrap items-center justify-between gap-2 border-t-[4px] border-ink bg-forest-deep px-6 py-3 text-sm font-bold sm:px-8">
         <span className="text-crest">+G$ {gdFmt(earnedGd)} in this week</span>
         <span className="text-cream/70">−G$ {gdFmt(spentGd)} on bills & AI</span>
-        <span className="text-cream/70">🔥 {user.streak}-day streak</span>
+        <span className="flex items-center gap-1.5 text-cream/70"><Icon name="flame" className="h-4 w-4 text-mandarin" /> {user.streak}-day streak</span>
         <span className="text-cream">{formatNgn(Math.floor(snap.totalGd * snap.ngnPerGd))} saved</span>
       </div>
     </section>
@@ -706,7 +707,7 @@ function RewardsCard({ state, flash }: { state: State; flash: (t: string) => voi
         {rewards.items.map((r) => (
           <li key={r.title} className="flex items-center gap-3">
             <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-extrabold ${r.done ? 'bg-forest text-cream' : 'bg-cream ring-2 ring-ink/10'}`}>
-              {r.done ? '✓' : '★'}
+              <Icon name={r.done ? 'check' : 'star'} className="h-4 w-4" strokeWidth={r.done ? 3 : 2.25} />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
@@ -757,7 +758,7 @@ function DemoControls({
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-bold tracking-widest text-cream/50 uppercase">Demo controls</p>
             <button onClick={() => setOpen(false)} className="text-cream/50 hover:text-cream" aria-label="Close demo controls">
-              ✕
+              <Icon name="x" className="h-4 w-4" strokeWidth={3} />
             </button>
           </div>
           <div className="grid gap-2">
@@ -813,7 +814,7 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
             </p>
           </div>
           <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-cream/10 font-bold hover:bg-cream/20" aria-label="Close">
-            ✕
+            <Icon name="x" className="h-4 w-4" strokeWidth={3} />
           </button>
         </div>
 
@@ -855,7 +856,7 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
                 ))}
               </div>
               <input value={meter} onChange={(e) => setMeter(e.target.value)} inputMode="numeric" placeholder="Meter number" className={field} />
-              {jar.details.customerName && <p className="text-sm font-bold text-forest">✓ {jar.details.customerName}</p>}
+              {jar.details.customerName && <p className="flex items-center gap-1 text-sm font-bold text-forest"><Icon name="check" className="h-4 w-4" strokeWidth={3} /> {jar.details.customerName}</p>}
             </div>
           ) : (
             <div className="grid gap-2">
@@ -917,15 +918,15 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
   )
 }
 
-const ACT_STYLE: Record<string, { icon: string; tint: string; sign: '+' | '−' | '' }> = {
-  claim: { icon: '☀', tint: 'bg-crest', sign: '+' },
-  deposit: { icon: '＋', tint: 'bg-crest-soft', sign: '+' },
-  reward: { icon: '★', tint: 'bg-cream ring-2 ring-ink/15', sign: '+' },
-  refund: { icon: '↩', tint: 'bg-crest-soft', sign: '+' },
-  pay: { icon: '✓', tint: 'bg-mandarin', sign: '−' },
-  move: { icon: '→', tint: 'bg-cream', sign: '' },
-  ai: { icon: '✦', tint: 'bg-forest-soft text-cream', sign: '−' },
-  agent: { icon: '🫙', tint: 'bg-ink text-cream', sign: '' },
+const ACT_STYLE: Record<string, { icon: IconName; tint: string; sign: '+' | '−' | '' }> = {
+  claim: { icon: 'sun', tint: 'bg-crest', sign: '+' },
+  deposit: { icon: 'plus', tint: 'bg-crest-soft', sign: '+' },
+  reward: { icon: 'star', tint: 'bg-cream ring-2 ring-ink/15', sign: '+' },
+  refund: { icon: 'undo', tint: 'bg-crest-soft', sign: '+' },
+  pay: { icon: 'bolt', tint: 'bg-mandarin', sign: '−' },
+  move: { icon: 'arrow', tint: 'bg-cream', sign: '' },
+  ai: { icon: 'sparkle', tint: 'bg-forest-soft text-cream', sign: '−' },
+  agent: { icon: 'jar', tint: 'bg-ink text-cream', sign: '' },
 }
 
 function AgentLog({ items, chainMode }: { items: Activity[]; chainMode: string }) {
@@ -941,7 +942,7 @@ function AgentLog({ items, chainMode }: { items: Activity[]; chainMode: string }
           return (
             <li key={a.id} className={`flex items-center gap-3 px-4 py-3 ${i ? 'border-t border-ink/10' : ''}`}>
               <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-base font-extrabold ${a.status === 'failed' ? 'bg-red-100' : st.tint}`}>
-                {a.status === 'failed' ? '!' : st.icon}
+                <Icon name={a.status === 'failed' ? 'alert' : st.icon} className="h-5 w-5" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-bold">{a.title}</p>
@@ -972,7 +973,7 @@ function AgentLog({ items, chainMode }: { items: Activity[]; chainMode: string }
 
 function TelegramChip({ state }: { state: State }) {
   const { telegramLinked, telegramLink } = state.user
-  if (telegramLinked) return <span className="text-sm font-bold text-forest">✓ On Telegram</span>
+  if (telegramLinked) return <span className="flex items-center gap-1 text-sm font-bold text-forest"><Icon name="check" className="h-4 w-4" strokeWidth={3} /> On Telegram</span>
   if (!telegramLink) return null
   return (
     <a href={telegramLink} target="_blank" rel="noreferrer" className="rounded-full bg-forest px-3 py-1.5 text-sm font-bold text-cream hover:bg-forest-soft">
@@ -1019,7 +1020,7 @@ function Chat({ state, setState, flash }: { state: State; setState: (s: State) =
     <section className="flex h-[calc(100dvh-10.5rem)] flex-col overflow-hidden rounded-[2rem] border-[4px] border-ink bg-white shadow-chunk-lg lg:sticky lg:top-6 lg:h-[680px]">
       <div className="flex items-center gap-3 bg-forest px-5 py-4 text-cream">
         <div className="relative">
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-crest text-xl">🫙</span>
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-crest text-ink"><Icon name="jar" className="h-6 w-6" /></span>
           <span className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-forest bg-mandarin" />
         </div>
         <div>

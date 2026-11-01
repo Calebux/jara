@@ -1,17 +1,18 @@
 import Link from 'next/link'
+import { Icon, type IconName } from '@/components/Icon'
 import { Jar } from '@/components/Jar'
 import { botLink } from '@/lib/telegram'
 
 export const dynamic = 'force-dynamic'
 
 const WEEK = [
-  { day: 'Mon', icon: '☀️', title: 'Claimed G$ for you', body: 'Light jar 40% · Data 80% · Airtime 65%', tone: 'cream' },
-  { day: 'Tue', icon: '💬', title: '"Buy 1GB for my mama"', body: 'Sent in 10 seconds. Paid from the Data jar.', tone: 'mandarin' },
-  { day: 'Wed', icon: '✨', title: 'Brainstormed your project', body: '8 final-year project ideas in 20 seconds. G$ 150 from your AI jar.', tone: 'cream' },
-  { day: 'Thu', icon: '💡', title: 'Light jar hit ₦3,000', body: 'Auto-paid. Meter token sent to your chat.', tone: 'crest' },
-  { day: 'Fri', icon: '⭐', title: 'Reward collected', body: 'First bill paid with G$ — +G$ 300 bonus, no forms.', tone: 'cream' },
-  { day: 'Sat', icon: '🔥', title: '7-day streak bonus', body: 'Extra G$ dropped in for showing up all week.', tone: 'forest' },
-  { day: 'Sun', icon: '📊', title: 'Your weekly wrap', body: '4 bills paid with G$. ₦600 you didn’t spend.', tone: 'mandarin' },
+  { day: 'Mon', icon: 'sun', title: 'Claimed G$ for you', body: 'Light jar 40% · Data 80% · Airtime 65%', tone: 'cream' },
+  { day: 'Tue', icon: 'chat', title: '"Buy 1GB for my mama"', body: 'Sent in 10 seconds. Paid from the Data jar.', tone: 'mandarin' },
+  { day: 'Wed', icon: 'sparkle', title: 'Brainstormed your project', body: '8 final-year project ideas in 20 seconds. G$ 150 from your AI jar.', tone: 'cream' },
+  { day: 'Thu', icon: 'bolt', title: 'Light jar hit ₦3,000', body: 'Auto-paid. Meter token sent to your chat.', tone: 'crest' },
+  { day: 'Fri', icon: 'star', title: 'Reward collected', body: 'First bill paid with G$ — +G$ 300 bonus, no forms.', tone: 'cream' },
+  { day: 'Sat', icon: 'flame', title: '7-day streak bonus', body: 'Extra G$ dropped in for showing up all week.', tone: 'forest' },
+  { day: 'Sun', icon: 'chart', title: 'Your weekly wrap', body: '4 bills paid with G$. ₦600 you didn’t spend.', tone: 'mandarin' },
 ] as const
 
 const TONE: Record<string, string> = {
@@ -29,7 +30,7 @@ export default function Home() {
       <header className="bg-forest">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 text-cream">
-            <span className="grid h-10 w-10 place-items-center rounded-xl border-[3px] border-ink bg-crest text-xl shadow-chunk-sm">🫙</span>
+            <span className="grid h-10 w-10 place-items-center rounded-xl border-[3px] border-ink bg-crest text-ink shadow-chunk-sm"><Icon name="jar" className="h-6 w-6" /></span>
             <span className="text-2xl font-extrabold tracking-tight">Jarra</span>
           </Link>
           <Link href="/app" className="press rounded-full border-[3px] border-ink bg-mandarin px-5 py-2 font-bold text-ink shadow-chunk-sm">
@@ -136,13 +137,20 @@ export default function Home() {
                   </div>
                   <div className="h-5 rounded-lg border-[4px] border-ink bg-crest shadow-chunk" />
                   <div className="relative -mt-3 mr-[-8px] ml-auto w-[88%] rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-white p-5 text-ink shadow-chunk-lg">
-                    <p className="text-sm font-extrabold text-forest uppercase">🤖 Jarra AI agent · 7:02am</p>
+                    <p className="flex items-center gap-1.5 text-sm font-extrabold text-forest uppercase"><Icon name="bot" className="h-4 w-4" /> Jarra AI agent · 7:02am</p>
                     <p className="mt-1 text-lg leading-snug font-bold">Morning! While you slept I:</p>
                     <ul className="mt-2 grid gap-1 text-[15px] font-bold">
-                      <li>✅ Claimed G$ 1,400 into your jars</li>
-                      <li>💡 Paid ₦3,000 light — token sent</li>
-                      <li>⭐ Collected a G$ 400 saver bonus</li>
-                      <li>✨ AI jar covers 2 research briefs</li>
+                      {([
+                        ['sun', 'bg-crest', 'Claimed G$ 1,400 into your jars'],
+                        ['bolt', 'bg-mandarin', 'Paid ₦3,000 light — token sent'],
+                        ['star', 'bg-cream', 'Collected a G$ 400 saver bonus'],
+                        ['sparkle', 'bg-forest text-cream', 'AI jar covers 2 research briefs'],
+                      ] as const).map(([ic, bg, t]) => (
+                        <li key={t} className="flex items-center gap-2">
+                          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 border-ink ${bg}`}><Icon name={ic} className="h-3.5 w-3.5" strokeWidth={2.5} /></span>
+                          {t}
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 </div>
@@ -179,7 +187,7 @@ export default function Home() {
               >
                 <div className="flex items-center justify-between">
                   <span className="rounded-full border-[3px] border-ink bg-cream px-3 py-0.5 text-sm font-extrabold text-ink">{w.day}</span>
-                  <span className="text-3xl">{w.icon}</span>
+                  <span className="grid h-11 w-11 place-items-center rounded-xl border-[3px] border-ink bg-cream text-ink"><Icon name={w.icon as IconName} className="h-6 w-6" /></span>
                 </div>
                 <p className="mt-5 text-xl leading-tight font-extrabold">{w.title}</p>
                 <p className="mt-2 font-medium opacity-80">{w.body}</p>
@@ -240,10 +248,10 @@ export default function Home() {
             <Bubble me>Abeg send ₦500 airtime to my mama 0803 555 1234</Bubble>
             <Bubble>₦500 MTN airtime to 0803 555 1234 — G$ from your Airtime jar. Make I send am?</Bubble>
             <div className="flex gap-2 pl-1">
-              <span className="rounded-xl border-[3px] border-ink bg-mandarin px-4 py-2 font-extrabold shadow-chunk-sm">✅ Pay it</span>
-              <span className="rounded-xl border-[3px] border-ink bg-cream px-4 py-2 font-extrabold shadow-chunk-sm">✖ Cancel</span>
+              <span className="rounded-xl border-[3px] border-ink bg-mandarin px-4 py-2 font-extrabold shadow-chunk-sm">Pay it</span>
+              <span className="rounded-xl border-[3px] border-ink bg-cream px-4 py-2 font-extrabold shadow-chunk-sm">Cancel</span>
             </div>
-            <Bubble>Done ✅ Mama don get am. Airtime jar still dey 60%.</Bubble>
+            <Bubble>Done. Mama don get am. Airtime jar still dey 60%.</Bubble>
           </div>
         </div>
       </section>
@@ -265,7 +273,7 @@ export default function Home() {
 
       <footer className="bg-forest-deep py-10 text-cream/70">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 text-sm font-semibold sm:flex-row sm:px-6">
-          <p>🫙 Jarra · GoodBuilders Season 5</p>
+          <p className="flex items-center gap-2"><Icon name="jar" className="h-4 w-4" /> Jarra · GoodBuilders Season 5</p>
           <p>Built on GoodDollar &amp; Celo · Brain on AntSeed · by Calbridge Digital Labs</p>
         </div>
       </footer>
