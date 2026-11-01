@@ -7,7 +7,7 @@ const bricolage = Bricolage_Grotesque({ variable: '--font-bricolage', subsets: [
 export const metadata: Metadata = {
   title: 'Jarra — your AI agent that puts your G$ to work',
   description:
-    'Jarra is an AI agent that collects your free daily GoodDollar and puts it to work: saves it, pays your light, data and airtime, finds you rewards, and pays for AI help with research, assignments and ideas. No crypto talk.',
+    'Jarra is an AI agent that collects your daily GoodDollar and puts it to work: saves it, pays your light, data and airtime, finds you rewards, and pays for AI help with research, assignments and ideas. No crypto talk.',
 }
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#0f3d2a' }

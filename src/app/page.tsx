@@ -45,9 +45,10 @@ export default function Home() {
             <span className="h-2.5 w-2.5 rounded-full bg-mandarin" /> Powered by GoodDollar · Built on Celo
           </p>
 
-          <div className="relative mt-6">
-            <h1 className="relative z-10 text-[clamp(3.6rem,13.5vw,11.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
-              <span className="mb-[0.18em] flex items-center gap-[0.25em] text-[0.36em] leading-none tracking-[-0.03em] text-crest">
+          <div className="mt-6 grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-10">
+            <div>
+            <h1 className="relative z-10 text-[clamp(4rem,17vw,9rem)] lg:text-[clamp(6rem,9.6vw,10.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
+              <span className="mb-[0.18em] flex items-center gap-[0.25em] whitespace-nowrap text-[0.36em] leading-none tracking-[-0.03em] text-crest">
                 Meet your AI agent
                 <span className="inline-block h-[0.14em] w-[1.6em] rounded-full bg-mandarin" />
               </span>
@@ -56,53 +57,26 @@ export default function Home() {
               </span>
               <span className="block">put to</span>
               <span className="block">
-                {' '}
                 <span className="relative mt-3 inline-block -rotate-3 rounded-[0.18em] border-[5px] border-ink bg-mandarin px-[0.12em] pt-[0.04em] pb-[0.1em] text-ink shadow-[10px_10px_0_0_#0b1f16]">
                   work.
                 </span>
               </span>
             </h1>
-
-            <ul className="relative z-10 mt-10 flex flex-wrap gap-3">
+            <ul className="relative z-10 mt-10 lg:mt-12 grid w-fit grid-cols-2 gap-2.5">
               {[
                 { t: 'Saves it', c: 'bg-crest text-ink' },
                 { t: 'Pays your bills', c: 'bg-mandarin text-ink' },
                 { t: 'Finds you rewards', c: 'bg-cream text-ink' },
                 { t: 'Powers your AI', c: 'bg-forest-soft text-cream' },
               ].map((j, i) => (
-                <li key={j.t} className={`flex items-center gap-2 rounded-full border-[3px] border-ink px-4 py-2 text-base font-extrabold uppercase shadow-chunk-sm sm:text-lg ${j.c}`}>
+                <li key={j.t} className={`flex items-center gap-2 rounded-full border-[3px] border-ink px-4 py-2 text-base font-extrabold uppercase shadow-chunk-sm sm:text-lg lg:text-base ${j.c}`}>
                   <span className="text-sm opacity-60">0{i + 1}</span> {j.t}
                 </li>
               ))}
             </ul>
-
-          </div>
-
-          <div className="mt-12 grid items-end gap-12 lg:mt-14 lg:grid-cols-[1fr_440px]">
-            <div>
-              <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
-                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly handles everyday money for you. It collects your GoodDollar every day and makes it useful — your{' '}
-                <span className="text-crest">light, data and airtime</span>, bonuses you&apos;d miss, and{' '}
-                <span className="text-crest">AI help for school and hustle</span>.
-              </p>
-              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-                <a
-                  href={tg ?? '/app'}
-                  className="press inline-flex items-center justify-center gap-2 rounded-2xl border-[4px] border-ink bg-mandarin px-8 py-5 text-xl font-extrabold text-ink uppercase shadow-chunk-lg"
-                >
-                  Start on Telegram →
-                </a>
-                <Link
-                  href="/app"
-                  className="press inline-flex items-center justify-center rounded-2xl border-[4px] border-ink bg-cream px-8 py-5 text-xl font-extrabold text-ink uppercase shadow-chunk-lg"
-                >
-                  Use it in your browser
-                </Link>
-              </div>
-              <p className="mt-5 text-sm font-bold tracking-wide text-cream/60 uppercase">Works on any phone · No crypto talk · No gas</p>
             </div>
 
-            <div className="relative mx-auto w-full max-w-[440px]">
+            <div className="relative mx-auto w-full max-w-[440px] lg:mt-10">
               <div className="grid grid-cols-4 items-end gap-3 px-2">
                 <div className="animate-bob" style={{ animationDelay: '0s' }}>
                   <Jar pct={72} color="crest" lid="#ff6b00" className="h-40 sm:h-44" label={{ icon: 'bolt', text: 'Light' }} />
@@ -130,6 +104,33 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          <div className="mt-14 grid items-end gap-8 border-t-[3px] border-cream/15 pt-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
+            <div>
+              <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
+                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly handles everyday money for you. It collects your GoodDollar every day and makes it useful — your{' '}
+                <span className="text-crest">light, data and airtime</span>, bonuses you&apos;d miss, and{' '}
+                <span className="text-crest">AI help for school and hustle</span>.
+              </p>
+            </div>
+            <div>
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <a
+                  href={tg ?? '/app'}
+                  className="press inline-flex items-center justify-center gap-2 rounded-2xl border-[4px] border-ink bg-mandarin px-8 py-5 text-xl font-extrabold text-ink uppercase shadow-chunk-lg"
+                >
+                  Start on Telegram →
+                </a>
+                <Link
+                  href="/app"
+                  className="press inline-flex items-center justify-center rounded-2xl border-[4px] border-ink bg-cream px-8 py-5 text-xl font-extrabold text-ink uppercase shadow-chunk-lg"
+                >
+                  Use it in your browser
+                </Link>
+              </div>
+              <p className="mt-5 text-sm font-bold tracking-wide text-cream/60 uppercase">Works on any phone · No crypto talk · No gas</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -141,7 +142,7 @@ export default function Home() {
           </h2>
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { n: '01', t: 'Saves', d: 'Claims your free G$ every day and splits it into jars for Light, Data and Airtime.', c: 'bg-crest' },
+              { n: '01', t: 'Saves', d: 'Claims your G$ every day and splits it into jars for Light, Data and Airtime.', c: 'bg-crest' },
               { n: '02', t: 'Pays', d: 'Knows when each bill comes round, tops the jar up in time and pays — then sends proof.', c: 'bg-mandarin' },
               { n: '03', t: 'Finds rewards', d: 'Streaks, first bills, invites, weekly saving — Jarra spots G$ bonuses and collects them.', c: 'bg-cream' },
               { n: '04', t: 'Powers your AI', d: 'Your G$ pays for AI help: research, assignments, brainstorming, exam practice, CVs and more.', c: 'bg-forest text-cream' },

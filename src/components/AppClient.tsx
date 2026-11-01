@@ -164,7 +164,7 @@ function Welcome({ onStart, refCode }: { onStart: (s: State) => void; refCode?: 
       </div>
       <div className="text-center">
         <h1 className="text-5xl leading-none font-extrabold tracking-tight">Hi, I&apos;m Jarra.</h1>
-        <p className="mt-4 text-lg font-medium text-ink/75">I&apos;m your AI bill agent. I&apos;ll collect your free GoodDollar every day and use it to pay your light, data and airtime.</p>
+        <p className="mt-4 text-lg font-medium text-ink/75">I&apos;m your AI bill agent. I&apos;ll collect your GoodDollar every day and use it to pay your light, data and airtime.</p>
       </div>
       <form
         className="grid gap-4"
@@ -302,7 +302,7 @@ function Onboarding({ state, setState, flash }: { state: State; setState: (s: St
               </button>
             )}
             <a href="https://wallet.gooddollar.org" target="_blank" rel="noreferrer" className="text-sm font-bold text-forest underline">
-              Not verified yet? Get your free G$ in GoodWallet first →
+              Not verified yet? Get your G$ in GoodWallet first →
             </a>
           </div>
         ) : (
