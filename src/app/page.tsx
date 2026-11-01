@@ -45,9 +45,9 @@ export default function Home() {
             <span className="h-2.5 w-2.5 rounded-full bg-mandarin" /> Powered by GoodDollar · Built on Celo
           </p>
 
-          <div className="mt-6 grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-10">
+          <div className="mt-6">
             <div>
-            <h1 className="relative z-10 text-[clamp(4rem,17vw,9rem)] lg:text-[clamp(6rem,9.6vw,10.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
+            <h1 className="relative z-10 text-[clamp(4rem,17vw,12.5rem)] lg:text-[clamp(7rem,11.6vw,12.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
               <span className="mb-[0.18em] flex items-center gap-[0.25em] whitespace-nowrap text-[0.36em] leading-none tracking-[-0.03em] text-crest">
                 Meet your AI agent
                 <span className="inline-block h-[0.14em] w-[1.6em] rounded-full bg-mandarin" />
@@ -55,54 +55,27 @@ export default function Home() {
               <span className="block">
                 Your <span className="text-crest">G$,</span>
               </span>
-              <span className="block">put to</span>
               <span className="block">
+                put to{' '}
                 <span className="relative mt-3 inline-block -rotate-3 rounded-[0.18em] border-[5px] border-ink bg-mandarin px-[0.12em] pt-[0.04em] pb-[0.1em] text-ink shadow-[10px_10px_0_0_#0b1f16]">
                   work.
                 </span>
               </span>
             </h1>
-            <ul className="relative z-10 mt-10 lg:mt-12 grid w-fit grid-cols-2 gap-2.5">
+            <ul className="relative z-10 mt-10 grid w-fit grid-cols-2 gap-2.5 md:flex md:flex-wrap md:gap-3">
               {[
                 { t: 'Saves it', c: 'bg-crest text-ink' },
                 { t: 'Pays your bills', c: 'bg-mandarin text-ink' },
                 { t: 'Finds you rewards', c: 'bg-cream text-ink' },
                 { t: 'Powers your AI', c: 'bg-forest-soft text-cream' },
               ].map((j, i) => (
-                <li key={j.t} className={`flex items-center gap-2 rounded-full border-[3px] border-ink px-4 py-2 text-base font-extrabold uppercase shadow-chunk-sm sm:text-lg lg:text-base ${j.c}`}>
+                <li key={j.t} className={`flex items-center gap-2 rounded-full border-[3px] border-ink px-4 py-2 text-base font-extrabold uppercase shadow-chunk-sm sm:text-lg ${j.c}`}>
                   <span className="text-sm opacity-60">0{i + 1}</span> {j.t}
                 </li>
               ))}
             </ul>
             </div>
 
-            <div className="relative mx-auto w-full max-w-[440px] lg:mt-10">
-              <div className="grid grid-cols-4 items-end gap-3 px-2">
-                <div className="animate-bob" style={{ animationDelay: '0s' }}>
-                  <Jar pct={72} color="crest" lid="#ff6b00" className="h-40 sm:h-44" label={{ icon: 'bolt', text: 'Light' }} />
-                </div>
-                <div className="animate-bob" style={{ animationDelay: '0.4s' }}>
-                  <Jar pct={45} color="mandarin" className="h-48 sm:h-52" label={{ icon: 'signal', text: 'Data' }} />
-                </div>
-                <div className="animate-bob" style={{ animationDelay: '0.8s' }}>
-                  <Jar pct={90} color="crest" lid="#ff6b00" className="h-36 sm:h-40" label={{ icon: 'phone', text: 'Airtime' }} />
-                </div>
-                <div className="animate-bob" style={{ animationDelay: '1.2s' }}>
-                  <Jar pct={60} color="mandarin" lid="#1d5a3f" className="h-44 sm:h-48" label={{ icon: 'spark', text: 'AI' }} />
-                </div>
-              </div>
-              <div className="h-5 rounded-lg border-[4px] border-ink bg-crest shadow-chunk" />
-              <div className="relative -mt-3 mr-[-8px] ml-auto w-[88%] rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-cream p-5 text-ink shadow-chunk-lg">
-                <p className="text-sm font-extrabold text-forest uppercase">🤖 Jarra AI agent · 7:02am</p>
-                <p className="mt-1 text-lg leading-snug font-bold">Morning! While you slept I:</p>
-                <ul className="mt-2 grid gap-1 text-[15px] font-bold">
-                  <li>✅ Claimed G$ 1,400 into your jars</li>
-                  <li>💡 Paid ₦3,000 light — token sent</li>
-                  <li>⭐ Collected a G$ 400 saver bonus</li>
-                  <li>✨ AI jar covers 2 research briefs</li>
-                </ul>
-              </div>
-            </div>
           </div>
 
           <div className="mt-14 grid items-end gap-8 border-t-[3px] border-cream/15 pt-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-12">
@@ -137,9 +110,43 @@ export default function Home() {
       {/* HOW */}
       <section className="grain bg-cream py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <h2 className="max-w-2xl text-4xl leading-none font-extrabold tracking-tight sm:text-6xl">
-            One AI agent. <span className="text-mandarin">Four jobs.</span> G$ drives all of them.
-          </h2>
+          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_440px]">
+            <div>
+              <h2 className="max-w-2xl text-4xl leading-none font-extrabold tracking-tight sm:text-6xl">
+                One AI agent. <span className="text-mandarin">Four jobs.</span> G$ drives all of them.
+              </h2>
+              <p className="mt-6 max-w-lg text-lg font-medium text-ink/70">
+                Jarra works while you sleep. Every morning you get one short message saying what it did with your G$, and you don&apos;t have to lift a finger.
+              </p>
+            </div>
+                <div className="relative mx-auto w-full max-w-[440px]">
+                  <div className="grid grid-cols-4 items-end gap-3 px-2">
+                    <div className="animate-bob" style={{ animationDelay: '0s' }}>
+                      <Jar pct={72} color="crest" lid="#ff6b00" className="h-40 sm:h-44" label={{ icon: 'bolt', text: 'Light' }} />
+                    </div>
+                    <div className="animate-bob" style={{ animationDelay: '0.4s' }}>
+                      <Jar pct={45} color="mandarin" className="h-48 sm:h-52" label={{ icon: 'signal', text: 'Data' }} />
+                    </div>
+                    <div className="animate-bob" style={{ animationDelay: '0.8s' }}>
+                      <Jar pct={90} color="crest" lid="#ff6b00" className="h-36 sm:h-40" label={{ icon: 'phone', text: 'Airtime' }} />
+                    </div>
+                    <div className="animate-bob" style={{ animationDelay: '1.2s' }}>
+                      <Jar pct={60} color="mandarin" lid="#1d5a3f" className="h-44 sm:h-48" label={{ icon: 'spark', text: 'AI' }} />
+                    </div>
+                  </div>
+                  <div className="h-5 rounded-lg border-[4px] border-ink bg-crest shadow-chunk" />
+                  <div className="relative -mt-3 mr-[-8px] ml-auto w-[88%] rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-white p-5 text-ink shadow-chunk-lg">
+                    <p className="text-sm font-extrabold text-forest uppercase">🤖 Jarra AI agent · 7:02am</p>
+                    <p className="mt-1 text-lg leading-snug font-bold">Morning! While you slept I:</p>
+                    <ul className="mt-2 grid gap-1 text-[15px] font-bold">
+                      <li>✅ Claimed G$ 1,400 into your jars</li>
+                      <li>💡 Paid ₦3,000 light — token sent</li>
+                      <li>⭐ Collected a G$ 400 saver bonus</li>
+                      <li>✨ AI jar covers 2 research briefs</li>
+                    </ul>
+                  </div>
+                </div>
+          </div>
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { n: '01', t: 'Saves', d: 'Claims your G$ every day and splits it into jars for Light, Data and Airtime.', c: 'bg-crest' },
