@@ -47,7 +47,7 @@ export default function Home() {
 
           <div className="mt-6">
             <div>
-            <h1 className="relative z-10 text-[clamp(4rem,17vw,12.5rem)] lg:text-[clamp(7rem,11.6vw,12.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
+            <h1 className="relative z-10 text-[clamp(4rem,17vw,12.5rem)] lg:text-[clamp(6rem,10vw,10.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
               <span className="mb-[0.18em] flex items-center gap-[0.25em] whitespace-nowrap text-[0.36em] leading-none tracking-[-0.03em] text-crest">
                 Meet your AI agent
                 <span className="inline-block h-[0.14em] w-[1.6em] rounded-full bg-mandarin" />
@@ -55,7 +55,7 @@ export default function Home() {
               <span className="block">
                 Your <span className="text-crest">G$,</span>
               </span>
-              <span className="block">
+              <span className="block lg:whitespace-nowrap">
                 put to{' '}
                 <span className="relative mt-3 inline-block -rotate-3 rounded-[0.18em] border-[5px] border-ink bg-mandarin px-[0.12em] pt-[0.04em] pb-[0.1em] text-ink shadow-[10px_10px_0_0_#0b1f16]">
                   work.
