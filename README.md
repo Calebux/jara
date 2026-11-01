@@ -1,6 +1,8 @@
 # Jara — your G$, put to work
 
-Jara (usejara.xyz) is an AI agent for everyday life, built for **GoodBuilders Season 5** (GoodDollar × Flow State, on Celo).
+Live at **[usejara.xyz](https://usejara.xyz)** · Source: [github.com/Calebux/jara](https://github.com/Calebux/jara)
+
+Jara is an AI agent for everyday life, built for **GoodBuilders Season 5** (GoodDollar × Flow State, on Celo).
 
 Jara quietly handles four everyday jobs, and **G$ drives all of them**:
 
