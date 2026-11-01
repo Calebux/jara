@@ -12,7 +12,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { name?: string; tg?: string }
+  const body = (await req.json().catch(() => ({}))) as { name?: string; tg?: string; ref?: string }
   // Arriving from the Telegram bot's "Set up" button: sign in as that chat's user.
   if (typeof body.tg === 'string' && body.tg) {
     const fromTg = await getUserByLinkCode(body.tg)
@@ -25,7 +25,8 @@ export async function POST(req: Request) {
   const existing = await currentUser()
   if (existing) return NextResponse.json(await userState(existing))
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 40) || undefined : undefined
-  const user = await createUser({ name })
+  const referrer = typeof body.ref === 'string' && body.ref ? await getUserByLinkCode(body.ref) : null
+  const user = await createUser({ name, referredBy: referrer?.id })
   const res = NextResponse.json(await userState(user))
   setSessionCookie(res, user.sessionToken)
   return res

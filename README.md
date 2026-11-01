@@ -2,7 +2,14 @@
 
 Jarra is an AI agent for everyday life, built for **GoodBuilders Season 5** (GoodDollar × Flow State, on Celo).
 
-Every day it **claims** your free GoodDollar UBI, **saves** it into bill jars (💡 Light, 📶 Data, 📞 Airtime) and **pays** those bills for you: Nigerian airtime, data and prepaid electricity. You talk to it on Telegram or on the web, in English or Pidgin. It always shows you the bill and waits for your "yes". Users never hear crypto jargon.
+Jarra quietly handles four everyday jobs, and **G$ drives all of them**:
+
+- **Saves.** Claims your free daily GoodDollar UBI and splits it into bill jars (Light, Data, Airtime).
+- **Pays.** Learns how often each bill comes round, tops the jar up before it's due, then pays Nigerian airtime, data or prepaid electricity on time.
+- **Finds rewards.** Spots and collects G$ bonuses: streaks, first bill, weekly saver, invites, first gig.
+- **Finds work.** Matches small gigs paid in G$ (surveys, translation, photos, typing, delivery) to your skills and city. When a gig is done, the pay goes straight into your jars.
+
+The agent runs on its own schedule (`/api/cron/daily`, every few hours) and sends one quiet summary. You talk to it on Telegram or on the web, in English or Pidgin. It always shows you the bill and waits for your "yes". Users never hear crypto jargon.
 
 ## How it works
 
@@ -37,6 +44,13 @@ Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME`, then register the webhook:
 ```bash
 curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook?url=$APP_URL/api/telegram&secret_token=$TELEGRAM_WEBHOOK_SECRET"
 ```
+
+## Gigs API (partners)
+`POST /api/admin/gigs` with `Authorization: Bearer $ADMIN_KEY` does two things:
+- With `{title, description, rewardGd, poster, skills[], city?, slots}` it posts a gig.
+- With `{action:"approve", gigId, userId}` it approves a submission and pays the worker in G$ from the treasury.
+
+Demo mode seeds 8 example gigs.
 
 ## GoodBuilders metrics
 `GET /api/stats` returns users, connected users, claims, bills paid and rewards, with G$ volume for each.

@@ -44,6 +44,10 @@ export interface User {
   streak: number
   lastClaimDay: string | null
   pending: PendingAction | null
+  skills: string[]
+  city: string | null
+  referredBy: string | null
+  lastRunAt: number | null
   createdAt: number
 }
 
@@ -61,6 +65,10 @@ function toUser(r: Row): User {
     streak: Number(r.streak),
     lastClaimDay: (r.last_claim_day as string) ?? null,
     pending: r.pending_action ? (JSON.parse(r.pending_action as string) as PendingAction) : null,
+    skills: r.skills ? (JSON.parse(r.skills as string) as string[]) : [],
+    city: (r.city as string) ?? null,
+    referredBy: (r.referred_by as string) ?? null,
+    lastRunAt: r.last_run_at === null || r.last_run_at === undefined ? null : Number(r.last_run_at),
     createdAt: Number(r.created_at),
   }
 }
@@ -70,7 +78,7 @@ async function one(sql: string, args: (string | number | null)[]): Promise<User 
   return r.rows[0] ? toUser(r.rows[0]) : null
 }
 
-export async function createUser(input: { name?: string; tgChatId?: string } = {}): Promise<User> {
+export async function createUser(input: { name?: string; tgChatId?: string; referredBy?: string } = {}): Promise<User> {
   const id = `u_${randomBytes(8).toString('hex')}`
   const wallet = createAgentWallet()
   await run(
@@ -87,6 +95,7 @@ export async function createUser(input: { name?: string; tgChatId?: string } = {
       Date.now(),
     ],
   )
+  if (input.referredBy) await run('UPDATE users SET referred_by = ? WHERE id = ?', [input.referredBy, id])
   for (const kind of JAR_KINDS) {
     await run('INSERT INTO jars (user_id, kind, target_ngn) VALUES (?, ?, ?)', [id, kind, JAR_INFO[kind].defaultTarget])
   }
@@ -113,6 +122,9 @@ export async function updateUser(
     streak: number
     lastClaimDay: string | null
     pending: PendingAction | null
+    skills: string[]
+    city: string | null
+    lastRunAt: number
   }>,
 ) {
   const cols: Record<string, string | number | null> = {}
@@ -123,6 +135,9 @@ export async function updateUser(
   if ('streak' in patch) cols.streak = patch.streak ?? 0
   if ('lastClaimDay' in patch) cols.last_claim_day = patch.lastClaimDay ?? null
   if ('pending' in patch) cols.pending_action = patch.pending ? JSON.stringify(patch.pending) : null
+  if ('skills' in patch) cols.skills = JSON.stringify(patch.skills ?? [])
+  if ('city' in patch) cols.city = patch.city ?? null
+  if ('lastRunAt' in patch) cols.last_run_at = patch.lastRunAt ?? null
   const keys = Object.keys(cols)
   if (!keys.length) return
   await run(`UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...Object.values(cols), id])
@@ -136,7 +151,7 @@ export async function linkTelegram(userId: string, chatId: string) {
 
 // ---------- activity ----------
 
-export type ActivityType = 'claim' | 'deposit' | 'pay' | 'refund' | 'reward' | 'move'
+export type ActivityType = 'claim' | 'deposit' | 'pay' | 'refund' | 'reward' | 'move' | 'work' | 'earn' | 'agent'
 
 export interface Activity {
   id: number

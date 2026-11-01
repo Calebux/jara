@@ -15,7 +15,7 @@ import {
 } from './catalog'
 import { CELOSCAN_TX, sendGdFromAgent, sendGdFromTreasury, treasuryAddress } from './chain'
 import { serverConfig } from './env'
-import { creditJar, debitJars, getJars, syncJars, withUserLock } from './jars'
+import { creditJar, debitJars, getJars, markJarPaid, syncJars, withUserLock } from './jars'
 import { gdForNgn } from './price'
 import { getTopupProvider } from './providers'
 import { JAR_INFO, logActivity, updateActivity, type PendingAction, type User } from './users'
@@ -163,6 +163,7 @@ export async function payBill(user: User, action: PendingAction): Promise<BillRe
     const explorerUrl = serverConfig().chain.mode === 'celo' ? CELOSCAN_TX(txHash) : undefined
 
     if (result.state === 'success') {
+      await markJarPaid(user.id, action.kind)
       const token = result.token ? formatToken(result.token) : undefined
       await updateActivity(activityId, {
         status: 'done',

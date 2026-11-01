@@ -24,6 +24,9 @@ export interface Jar {
   targetNgn: number
   autoPay: boolean
   details: JarDetails
+  /** How often this bill comes round (e.g. light every 10 days). */
+  everyDays: number | null
+  lastPaidAt: number | null
 }
 
 export interface JarView {
@@ -36,6 +39,9 @@ export interface JarView {
   pct: number
   autoPay: boolean
   details: JarDetails
+  everyDays: number | null
+  /** ms timestamp when the bill is next due, if Jarra knows the cadence. */
+  dueAt: number | null
 }
 
 export interface Snapshot {
@@ -70,6 +76,8 @@ export async function getJars(userId: string): Promise<Jar[]> {
       targetNgn: Number(x?.target_ngn ?? JAR_INFO[kind].defaultTarget),
       autoPay: Number(x?.auto_pay ?? 0) === 1,
       details: x ? (JSON.parse(x.details as string) as JarDetails) : {},
+      everyDays: x?.every_days ? Number(x.every_days) : null,
+      lastPaidAt: x?.last_paid_at ? Number(x.last_paid_at) : null,
     }
   })
 }
@@ -81,16 +89,26 @@ async function setJarBalance(userId: string, kind: JarKind, wei: bigint) {
 export async function updateJar(
   userId: string,
   kind: JarKind,
-  patch: Partial<{ targetNgn: number; autoPay: boolean; details: JarDetails }>,
+  patch: Partial<{ targetNgn: number; autoPay: boolean; details: JarDetails; everyDays: number | null }>,
 ) {
   const jar = (await getJars(userId)).find((j) => j.kind === kind)!
-  await run('UPDATE jars SET target_ngn = ?, auto_pay = ?, details = ? WHERE user_id = ? AND kind = ?', [
+  const every = 'everyDays' in patch ? patch.everyDays : jar.everyDays
+  await run('UPDATE jars SET target_ngn = ?, auto_pay = ?, details = ?, every_days = ? WHERE user_id = ? AND kind = ?', [
     Math.max(0, Math.round(patch.targetNgn ?? jar.targetNgn)),
     (patch.autoPay ?? jar.autoPay) ? 1 : 0,
     JSON.stringify({ ...jar.details, ...(patch.details ?? {}) }),
+    every && every > 0 ? Math.round(every) : null,
     userId,
     kind,
   ])
+}
+
+export async function markJarPaid(userId: string, kind: JarKind) {
+  await run('UPDATE jars SET last_paid_at = ? WHERE user_id = ? AND kind = ?', [Date.now(), userId, kind])
+}
+
+export function jarDueAt(j: Pick<Jar, 'everyDays' | 'lastPaidAt'>): number | null {
+  return j.everyDays && j.lastPaidAt ? j.lastPaidAt + j.everyDays * 86_400_000 : null
 }
 
 /**
@@ -205,6 +223,8 @@ export async function snapshot(user: User): Promise<Snapshot> {
         pct: j.targetNgn > 0 ? Math.min(100, Math.round((balanceNgn / j.targetNgn) * 100)) : 0,
         autoPay: j.autoPay,
         details: j.details,
+        everyDays: j.everyDays,
+        dueAt: jarDueAt(j),
       }
     }),
     totalGd: toGd(balance),

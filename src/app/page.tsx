@@ -7,9 +7,9 @@ export const dynamic = 'force-dynamic'
 const WEEK = [
   { day: 'Mon', icon: '☀️', title: 'Claimed G$ for you', body: 'Light jar 40% · Data 80% · Airtime 65%', tone: 'cream' },
   { day: 'Tue', icon: '💬', title: '"Buy 1GB for my mama"', body: 'Sent in 10 seconds. Paid from the Data jar.', tone: 'mandarin' },
-  { day: 'Wed', icon: '🫙', title: 'Jars filling quietly', body: 'Free G$ split to whichever bill needs it most.', tone: 'cream' },
+  { day: 'Wed', icon: '🧰', title: 'Found you a gig', body: 'Translate 20 phrases into Hausa — G$ 4,000. Done by evening.', tone: 'cream' },
   { day: 'Thu', icon: '💡', title: 'Light jar hit ₦3,000', body: 'Auto-paid. Meter token sent to your chat.', tone: 'crest' },
-  { day: 'Fri', icon: '📞', title: 'Airtime topped up', body: '"Abeg add ₦200 airtime" — done.', tone: 'cream' },
+  { day: 'Fri', icon: '⭐', title: 'Reward collected', body: 'First bill paid with G$ — +G$ 300 bonus, no forms.', tone: 'cream' },
   { day: 'Sat', icon: '🔥', title: '7-day streak bonus', body: 'Extra G$ dropped in for showing up all week.', tone: 'forest' },
   { day: 'Sun', icon: '📊', title: 'Your weekly wrap', body: '4 bills paid with G$. ₦600 you didn’t spend.', tone: 'mandarin' },
 ] as const
@@ -68,8 +68,8 @@ export default function Home() {
           <div className="mt-12 grid items-end gap-12 lg:mt-14 lg:grid-cols-[1fr_440px]">
             <div>
               <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
-                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> in your chat. It collects your free GoodDollar every day, saves it in jars —{' '}
-                <span className="text-crest">Light, Data, Airtime</span> — and pays them for you.
+                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly works for you. It saves your free GoodDollar,{' '}
+                <span className="text-crest">pays your bills, finds you rewards and finds you paid work</span> — all in G$.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <a
@@ -115,17 +115,18 @@ export default function Home() {
       <section className="grain bg-cream py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <h2 className="max-w-2xl text-4xl leading-none font-extrabold tracking-tight sm:text-6xl">
-            One AI agent. <span className="text-mandarin">Three jobs.</span> Every single day.
+            One AI agent. <span className="text-mandarin">Four jobs.</span> G$ drives all of them.
           </h2>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { n: '01', t: 'It claims', d: 'Your free GoodDollar lands every day. Jarra collects it for you — even when you forget.', c: 'bg-crest' },
-              { n: '02', t: 'It saves', d: 'G$ is split into jars for the bills you actually have. The jar that needs it most fills first.', c: 'bg-mandarin' },
-              { n: '03', t: 'It pays', d: 'When a jar is full — or when you ask — Jarra pays the bill and sends you proof.', c: 'bg-forest text-cream' },
+              { n: '01', t: 'Saves', d: 'Claims your free G$ every day and splits it into jars for Light, Data and Airtime.', c: 'bg-crest' },
+              { n: '02', t: 'Pays', d: 'Knows when each bill comes round, tops the jar up in time and pays — then sends proof.', c: 'bg-mandarin' },
+              { n: '03', t: 'Finds rewards', d: 'Streaks, first bills, invites, weekly saving — Jarra spots G$ bonuses and collects them.', c: 'bg-cream' },
+              { n: '04', t: 'Finds work', d: 'Matches small gigs to your skills and city — surveys, translation, photos — paid in G$.', c: 'bg-forest text-cream' },
             ].map((s) => (
               <div key={s.n} className={`press rounded-3xl border-[3px] border-ink p-7 shadow-chunk-lg ${s.c}`}>
-                <p className="text-6xl font-extrabold opacity-90">{s.n}</p>
-                <p className="mt-6 text-3xl font-extrabold">{s.t}</p>
+                <p className="text-5xl font-extrabold opacity-90">{s.n}</p>
+                <p className="mt-6 text-2xl font-extrabold">{s.t}</p>
                 <p className="mt-3 text-lg leading-relaxed font-medium opacity-90">{s.d}</p>
               </div>
             ))}

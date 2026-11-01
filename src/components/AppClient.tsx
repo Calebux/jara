@@ -19,6 +19,18 @@ interface JarView {
   pct: number
   autoPay: boolean
   details: { phone?: string; network?: string; disco?: string; meterType?: string; meterNumber?: string; customerName?: string }
+  everyDays: number | null
+  dueAt: number | null
+}
+interface GigView {
+  id: string
+  title: string
+  description: string
+  rewardGd: number
+  skills: string[]
+  city: string | null
+  poster: string
+  status?: 'suggested' | 'accepted' | 'submitted' | 'paid' | 'dismissed'
 }
 interface Activity {
   id: number
@@ -46,7 +58,14 @@ interface State {
     telegramLinked: boolean
     telegramLink: string | null
     hasPending: boolean
+    skills: string[]
+    city: string | null
+    lastRunAt: number | null
+    inviteLink: string
   }
+  gigs: GigView[]
+  rewards: { earnedGd: number; items: { title: string; detail: string; amountGd: number; done: boolean; progress: number }[] }
+  options: { skills: Record<string, string>; cities: string[] }
   snapshot: { jars: JarView[]; totalGd: number; freeGd: number; freeNgn: number; ngnPerGd: number }
   activity: Activity[]
   messages: Msg[]
@@ -80,7 +99,7 @@ const gdFmt = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 
 
 // ---------- root ----------
 
-export function AppClient({ tgCode }: { tgCode?: string }) {
+export function AppClient({ tgCode, refCode }: { tgCode?: string; refCode?: string }) {
   const [state, setState] = useState<State | null | undefined>(undefined)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -105,7 +124,7 @@ export function AppClient({ tgCode }: { tgCode?: string }) {
     <div className="min-h-dvh bg-cream">
       <TopBar state={state ?? null} />
       {state === undefined && <Loading />}
-      {state === null && <Welcome onStart={setState} />}
+      {state === null && <Welcome onStart={setState} refCode={refCode} />}
       {state && !state.user.connected && <Onboarding state={state} setState={setState} flash={flash} />}
       {state && state.user.connected && <Dashboard state={state} setState={setState} flash={flash} />}
       {toast && (
@@ -146,7 +165,7 @@ function Loading() {
 
 // ---------- welcome ----------
 
-function Welcome({ onStart }: { onStart: (s: State) => void }) {
+function Welcome({ onStart, refCode }: { onStart: (s: State) => void; refCode?: string }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   return (
@@ -164,7 +183,7 @@ function Welcome({ onStart }: { onStart: (s: State) => void }) {
           e.preventDefault()
           setBusy(true)
           try {
-            onStart(await api<State>('/api/session', { name }))
+            onStart(await api<State>('/api/session', { name, ref: refCode }))
           } finally {
             setBusy(false)
           }
@@ -359,14 +378,32 @@ function greeting() {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
 
+type Lane = 'save' | 'pay' | 'rewards' | 'work'
+const LANE_OF: Record<string, Lane | null> = { claim: 'save', deposit: 'save', move: 'save', pay: 'pay', refund: 'pay', reward: 'rewards', work: 'work', earn: 'work', agent: null }
+const LANES: { id: Lane; label: string; verb: string; color: string; ink: string }[] = [
+  { id: 'save', label: 'Saving', verb: 'Claims your G$ daily', color: 'bg-crest', ink: 'text-ink' },
+  { id: 'pay', label: 'Paying', verb: 'Pays bills when due', color: 'bg-mandarin', ink: 'text-ink' },
+  { id: 'rewards', label: 'Rewards', verb: 'Hunts G$ bonuses', color: 'bg-cream', ink: 'text-ink' },
+  { id: 'work', label: 'Work', verb: 'Finds gigs paid in G$', color: 'bg-forest-soft', ink: 'text-cream' },
+]
+
+function ago(ts: number | null) {
+  if (!ts) return 'not yet'
+  const m = Math.round((Date.now() - ts) / 60_000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`
+}
+
 function Dashboard({ state, setState, flash }: { state: State; setState: (s: State) => void; flash: (t: string) => void }) {
-  const [tab, setTab] = useState<'home' | 'chat'>('home')
+  const [tab, setTab] = useState<'home' | 'work' | 'chat'>('home')
   const [editing, setEditing] = useState<JarView | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
-  const { snapshot: snap, user } = state
+  const [lastSteps, setLastSteps] = useState<{ lane: Lane; text: string }[] | null>(null)
+  const { snapshot: snap } = state
   const mock = state.config.chainMode === 'mock'
-  const totalNgn = Math.floor(snap.totalGd * snap.ngnPerGd)
-  const claimedToday = state.activity.some((a) => a.type === 'claim' && new Date(a.createdAt).toDateString() === new Date().toDateString())
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label)
@@ -379,110 +416,52 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
     }
   }
 
-  const claim = () =>
-    run('claim', async () => {
-      const r = await api<{ message: string; state: State }>('/api/claim', {})
+  const runAgent = () =>
+    run('agent', async () => {
+      const r = await api<{ steps: { lane: Lane; text: string }[]; message: string; state: State }>('/api/agent/run', {})
       setState(r.state)
-      flash(r.message.split('\n')[0])
+      setLastSteps(r.steps)
+      flash(r.steps.length ? `Jarra handled ${r.steps.length} thing${r.steps.length > 1 ? 's' : ''}` : 'All quiet — nothing needed doing')
     })
+
+  const show = (t: 'home' | 'work' | 'chat') => `${tab === t ? '' : 'hidden'} lg:contents`
 
   return (
     <main className="mx-auto max-w-6xl px-4 pt-5 pb-28 sm:px-6 lg:pt-8 lg:pb-12">
-      {/* mobile switch */}
-      <div className="mb-4 grid grid-cols-2 rounded-full bg-forest/10 p-1 lg:hidden">
-        {(['home', 'chat'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-full py-2.5 text-sm font-extrabold transition ${tab === t ? 'bg-forest text-cream shadow' : 'text-forest'}`}
-          >
-            {t === 'home' ? 'My jars' : 'Talk to Jarra'}
+      <div className="mb-4 grid grid-cols-3 rounded-full bg-forest/10 p-1 lg:hidden">
+        {(['home', 'work', 'chat'] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={`rounded-full py-2.5 text-sm font-extrabold transition ${tab === t ? 'bg-forest text-cream shadow' : 'text-forest'}`}>
+            {t === 'home' ? 'Agent' : t === 'work' ? 'Work & rewards' : 'Chat'}
           </button>
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr] lg:items-start">
-        {/* LEFT: shelf + activity */}
-        <div className={`grid gap-6 ${tab === 'chat' ? 'hidden lg:grid' : ''}`}>
-          <section className="overflow-hidden rounded-[2rem] border-[4px] border-ink bg-forest text-cream shadow-chunk-lg">
-            <div className="flex items-start justify-between gap-4 p-6 pb-2 sm:p-8 sm:pb-2">
-              <div>
-                <p className="font-semibold text-cream/60">
-                  {greeting()}
-                  {user.name ? `, ${user.name}` : ''}
-                </p>
-                <p className="mt-1 text-6xl leading-none font-extrabold tracking-[-0.04em] sm:text-7xl">{formatNgn(totalNgn)}</p>
-                <p className="mt-2 font-semibold text-crest">G$ {gdFmt(snap.totalGd)} saved for your bills</p>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start">
+        <div className="grid gap-6">
+          <div className={show('home')}>
+            <AgentPanel state={state} busy={busy === 'agent'} onRun={runAgent} lastSteps={lastSteps} />
+            <JarShelf jars={snap.jars} onEdit={setEditing} totalGd={snap.totalGd} rate={snap.ngnPerGd} />
+          </div>
+          <div className={show('work')}>
+            <WorkSection state={state} setState={setState} flash={flash} onProfile={() => setProfileOpen(true)} />
+            <RewardsCard state={state} flash={flash} />
+          </div>
+          <div className={show('home')}>
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-xl font-extrabold">Agent log</h2>
+                <TelegramChip state={state} />
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className="rounded-full bg-cream/10 px-3 py-1 text-sm font-bold whitespace-nowrap">🔥 {user.streak}-day streak</span>
-              </div>
-            </div>
-
-            {/* shelf */}
-            <div className="relative mt-4 px-4 sm:px-8">
-              <div className="grid grid-cols-3 items-end gap-3 sm:gap-6">
-                {snap.jars.map((j) => (
-                  <button key={j.kind} onClick={() => setEditing(j)} className="group flex flex-col items-center text-center">
-                    <Jar
-                      pct={j.pct}
-                      color={JAR_COLOR[j.kind]}
-                      lid={j.kind === 'airtime' ? '#ff6b00' : '#ffc72c'}
-                      className="h-32 transition group-hover:-translate-y-1.5 sm:h-40"
-                      label={{ icon: JAR_ICON[j.kind], text: j.label }}
-                    />
-                  </button>
-                ))}
-              </div>
-              <div className="h-4 rounded-t-md border-x-[4px] border-t-[4px] border-ink bg-crest" />
-            </div>
-            <div className="grid grid-cols-3 gap-3 border-t-[4px] border-ink bg-forest-deep px-4 py-4 sm:gap-6 sm:px-8">
-              {snap.jars.map((j) => (
-                <button key={j.kind} onClick={() => setEditing(j)} className="text-left">
-                  <div className="flex items-baseline justify-between gap-1">
-                    <p className="font-extrabold">{j.label}</p>
-                    {j.autoPay && <span className="text-[10px] font-extrabold tracking-wider text-crest uppercase">Auto</span>}
-                  </div>
-                  <p className="mt-0.5 text-sm font-semibold text-cream/60">
-                    {formatNgn(j.balanceNgn)} <span className="hidden sm:inline">of {formatNgn(j.targetNgn)}</span>
-                  </p>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-cream/15">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ${j.kind === 'data' ? 'bg-mandarin' : 'bg-crest'}`}
-                      style={{ width: `${Math.max(j.pct, 3)}%` }}
-                    />
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-3 bg-forest-deep px-4 pb-6 sm:px-8">
-              <button
-                onClick={claim}
-                disabled={!!busy || claimedToday}
-                className="press flex-1 rounded-2xl border-[3px] border-ink bg-mandarin px-5 py-3.5 font-extrabold text-ink shadow-chunk-sm disabled:cursor-default disabled:border-cream/20 disabled:bg-cream/10 disabled:text-cream/60 disabled:shadow-none sm:flex-none"
-              >
-                {busy === 'claim' ? 'Claiming…' : claimedToday ? '✓ Claimed today' : 'Claim today’s G$'}
-              </button>
-              <p className="text-sm font-semibold text-cream/50">Tap a jar to set it up</p>
-            </div>
-          </section>
-
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xl font-extrabold">Activity</h2>
-              <TelegramChip state={state} />
-            </div>
-            <ActivityList items={state.activity} chainMode={state.config.chainMode} />
-          </section>
+              <AgentLog items={state.activity} chainMode={state.config.chainMode} />
+            </section>
+          </div>
         </div>
-
-        {/* RIGHT: chat */}
         <div className={tab === 'chat' ? '' : 'hidden lg:block'}>
           <Chat state={state} setState={setState} flash={flash} />
         </div>
       </div>
 
-      {mock && <DemoControls run={run} setState={setState} flash={flash} rate={snap.ngnPerGd} />}
+      {mock && <DemoControls run={run} setState={setState} rate={snap.ngnPerGd} onRunAgent={runAgent} />}
 
       {editing && (
         <JarSheet
@@ -499,26 +478,369 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
           }}
         />
       )}
+      {profileOpen && (
+        <ProfileSheet
+          state={state}
+          onClose={() => setProfileOpen(false)}
+          onSave={async (p) => {
+            try {
+              setState(await api<State>('/api/profile', p))
+              setProfileOpen(false)
+              flash('Saved — Jarra will look for work that fits you')
+            } catch (err) {
+              flash(err instanceof Error ? err.message : 'Could not save')
+            }
+          }}
+        />
+      )}
     </main>
+  )
+}
+
+function AgentPanel({ state, busy, onRun, lastSteps }: { state: State; busy: boolean; onRun: () => void; lastSteps: { lane: Lane; text: string }[] | null }) {
+  const { user, snapshot: snap } = state
+  const [now] = useState(() => Date.now())
+  const week = now - 7 * 86_400_000
+  const recent = state.activity.filter((a) => a.createdAt > week && a.status !== 'failed')
+  const earnedGd = recent
+    .filter((a) => ['claim', 'reward', 'earn', 'deposit'].includes(a.type) && a.amountWei)
+    .reduce((s, a) => s + Number(BigInt(a.amountWei!) / 10n ** 18n), 0)
+  const spentGd = recent.filter((a) => a.type === 'pay' && a.amountWei).reduce((s, a) => s + Number(BigInt(a.amountWei!) / 10n ** 18n), 0)
+
+  return (
+    <section className="overflow-hidden rounded-[2rem] border-[4px] border-ink bg-forest text-cream shadow-chunk-lg">
+      <div className="flex flex-wrap items-start justify-between gap-4 p-6 sm:p-8">
+        <div>
+          <p className="font-semibold text-cream/60">
+            {greeting()}
+            {user.name ? `, ${user.name}` : ''}
+          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="relative flex h-3.5 w-3.5">
+              <span className={`absolute inline-flex h-full w-full rounded-full bg-mandarin opacity-75 ${busy ? 'animate-ping' : ''}`} />
+              <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-mandarin" />
+            </span>
+            <p className="text-3xl leading-none font-extrabold tracking-tight sm:text-4xl">{busy ? 'Jarra is working…' : 'Jarra is on it'}</p>
+          </div>
+          <p className="mt-2 text-sm font-semibold text-cream/55">Last check-in {ago(user.lastRunAt)} · checks in by itself every few hours</p>
+        </div>
+        <button
+          onClick={onRun}
+          disabled={busy}
+          className="press rounded-2xl border-[3px] border-ink bg-mandarin px-5 py-3 font-extrabold text-ink shadow-chunk-sm disabled:opacity-70"
+        >
+          {busy ? 'Working…' : 'Check in now'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-px border-t-[4px] border-ink bg-ink sm:grid-cols-4">
+        {LANES.map((l) => {
+          const items = recent.filter((a) => LANE_OF[a.type] === l.id)
+          const latest = items[0]
+          const fresh = lastSteps?.filter((s) => s.lane === l.id) ?? []
+          return (
+            <div key={l.id} className={`${l.color} ${l.ink} relative p-4`}>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-extrabold tracking-widest uppercase opacity-70">{l.label}</p>
+                <span className="text-2xl leading-none font-extrabold tabular-nums">{items.length}</span>
+              </div>
+              <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-sm leading-snug font-bold">{fresh[0]?.text ?? latest?.title ?? l.verb}</p>
+              {fresh.length > 0 && <span className="absolute top-2 right-2 h-2.5 w-2.5 animate-pulse rounded-full bg-ink" />}
+            </div>
+          )
+        })}
+      </div>
+
+      {lastSteps && lastSteps.length > 0 && (
+        <div className="animate-pop border-t-[4px] border-ink bg-cream px-6 py-4 text-ink sm:px-8">
+          <p className="text-xs font-extrabold tracking-widest text-ink/50 uppercase">Just now, Jarra…</p>
+          <ul className="mt-2 grid gap-1.5">
+            {lastSteps.map((st, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-sm font-bold">
+                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${st.lane === 'save' ? 'bg-crest' : st.lane === 'pay' ? 'bg-mandarin' : st.lane === 'work' ? 'bg-forest' : 'bg-ink'}`} />
+                <span>{st.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t-[4px] border-ink bg-forest-deep px-6 py-3 text-sm font-bold sm:px-8">
+        <span className="text-crest">+G$ {gdFmt(earnedGd)} in this week</span>
+        <span className="text-cream/70">−G$ {gdFmt(spentGd)} on bills</span>
+        <span className="text-cream/70">🔥 {user.streak}-day streak</span>
+        <span className="text-cream">{formatNgn(Math.floor(snap.totalGd * snap.ngnPerGd))} saved</span>
+      </div>
+    </section>
+  )
+}
+
+function JarShelf({ jars, onEdit, totalGd, rate }: { jars: JarView[]; onEdit: (j: JarView) => void; totalGd: number; rate: number }) {
+  return (
+    <section className="rounded-[2rem] border-[4px] border-ink bg-white p-5 shadow-chunk sm:p-6">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-xl font-extrabold">Bill jars</h2>
+        <p className="text-sm font-bold text-ink/50">
+          G$ {gdFmt(totalGd)} · {formatNgn(Math.floor(totalGd * rate))}
+        </p>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3 sm:gap-5">
+        {jars.map((j) => (
+          <button key={j.kind} onClick={() => onEdit(j)} className="group text-left">
+            <div className="flex justify-center">
+              <Jar
+                pct={j.pct}
+                color={JAR_COLOR[j.kind]}
+                lid={j.kind === 'airtime' ? '#ff6b00' : '#ffc72c'}
+                className="h-28 transition group-hover:-translate-y-1 sm:h-32"
+                label={{ icon: JAR_ICON[j.kind], text: j.label }}
+              />
+            </div>
+            <p className="mt-2 text-sm font-extrabold">
+              {formatNgn(j.balanceNgn)} <span className="font-bold text-ink/45">/ {formatNgn(j.targetNgn)}</span>
+            </p>
+            <p className="text-xs font-bold text-ink/50">
+              {j.dueAt ? `Due ${new Date(j.dueAt).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric' })}` : j.everyDays ? `Every ${j.everyDays} days` : j.autoPay ? 'Auto-pays when full' : 'Tap to set up'}
+            </p>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function WorkSection({ state, setState, flash, onProfile }: { state: State; setState: (s: State) => void; flash: (t: string) => void; onProfile: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [proofFor, setProofFor] = useState<string | null>(null)
+  const [proof, setProof] = useState('')
+  const open = state.gigs.filter((g) => g.status !== 'paid')
+  const paid = state.gigs.filter((g) => g.status === 'paid')
+  const skills = state.user.skills.map((s) => state.options.skills[s] ?? s)
+
+  const act = async (gigId: string, action: 'accept' | 'dismiss' | 'submit', extra?: Record<string, string>) => {
+    setBusy(gigId + action)
+    try {
+      const r = await api<{ message: string; state: State }>('/api/gigs', { gigId, action, ...extra })
+      setState(r.state)
+      if (r.message) flash(r.message.split('.')[0])
+      setProofFor(null)
+      setProof('')
+    } catch (err) {
+      flash(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <section className="rounded-[2rem] border-[4px] border-ink bg-crest p-5 shadow-chunk sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-extrabold">Work Jarra found you</h2>
+          <p className="mt-1 text-sm font-semibold text-ink/65">Small jobs that pay G$ straight into your jars.</p>
+        </div>
+        <button onClick={onProfile} className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream hover:bg-forest">
+          {skills.length ? 'Edit my skills' : 'Tell Jarra what you can do'}
+        </button>
+      </div>
+      {skills.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {skills.map((s) => (
+            <span key={s} className="rounded-full bg-cream/70 px-2.5 py-0.5 text-xs font-bold">
+              {s}
+            </span>
+          ))}
+          {state.user.city && <span className="rounded-full bg-cream/70 px-2.5 py-0.5 text-xs font-bold">📍 {state.user.city}</span>}
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-3">
+        {open.length === 0 && (
+          <p className="rounded-2xl bg-cream/70 p-5 text-center font-semibold text-ink/60">
+            {skills.length ? 'Nothing new right now — Jarra checks again every few hours.' : 'Add your skills and city and Jarra will start finding paid work for you.'}
+          </p>
+        )}
+        {open.map((g) => (
+          <div key={g.id} className="rounded-2xl border-[3px] border-ink bg-cream p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="leading-snug font-extrabold">{g.title}</p>
+                <p className="mt-1 text-sm font-medium text-ink/60">{g.description}</p>
+                <p className="mt-1.5 text-xs font-bold text-ink/45">
+                  {g.poster}
+                  {g.city ? ` · ${g.city}` : ' · Remote'}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-xl bg-forest px-2.5 py-1.5 text-sm font-extrabold whitespace-nowrap text-cream">G$ {gdFmt(g.rewardGd)}</span>
+            </div>
+            {proofFor === g.id ? (
+              <form
+                className="mt-3 flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  act(g.id, 'submit', { proof })
+                }}
+              >
+                <input
+                  autoFocus
+                  value={proof}
+                  onChange={(e) => setProof(e.target.value)}
+                  placeholder="What did you do? Paste a link or note"
+                  className="min-w-0 flex-1 rounded-xl border-2 border-ink/15 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-ink"
+                />
+                <button disabled={!!busy} className="rounded-xl bg-mandarin px-4 text-sm font-extrabold">
+                  Send
+                </button>
+              </form>
+            ) : (
+              <div className="mt-3 flex gap-2">
+                {g.status === 'suggested' && (
+                  <>
+                    <button onClick={() => act(g.id, 'accept')} disabled={!!busy} className="press rounded-xl border-[3px] border-ink bg-mandarin px-4 py-2 text-sm font-extrabold shadow-chunk-sm">
+                      Take this gig
+                    </button>
+                    <button onClick={() => act(g.id, 'dismiss')} disabled={!!busy} className="rounded-xl px-3 py-2 text-sm font-bold text-ink/55 hover:text-ink">
+                      Not for me
+                    </button>
+                  </>
+                )}
+                {g.status === 'accepted' && (
+                  <button onClick={() => setProofFor(g.id)} className="press rounded-xl border-[3px] border-ink bg-forest px-4 py-2 text-sm font-extrabold text-cream shadow-chunk-sm">
+                    I’ve done it →
+                  </button>
+                )}
+                {g.status === 'submitted' && <span className="text-sm font-bold text-forest">Waiting for {g.poster} to approve…</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {paid.length > 0 && (
+        <p className="mt-3 text-sm font-bold text-ink/70">
+          ✓ {paid.length} gig{paid.length > 1 ? 's' : ''} done · G$ {gdFmt(paid.reduce((s, g) => s + g.rewardGd, 0))} earned
+        </p>
+      )}
+    </section>
+  )
+}
+
+function RewardsCard({ state, flash }: { state: State; flash: (t: string) => void }) {
+  const { rewards, user } = state
+  return (
+    <section className="rounded-[2rem] border-[4px] border-ink bg-white p-5 shadow-chunk sm:p-6">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-xl font-extrabold">Rewards</h2>
+        <p className="font-extrabold text-forest">G$ {gdFmt(rewards.earnedGd)} earned</p>
+      </div>
+      <p className="mt-1 text-sm font-semibold text-ink/55">Jarra collects these for you automatically.</p>
+      <ul className="mt-4 grid gap-2.5">
+        {rewards.items.map((r) => (
+          <li key={r.title} className="flex items-center gap-3">
+            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-extrabold ${r.done ? 'bg-forest text-cream' : 'bg-cream ring-2 ring-ink/10'}`}>
+              {r.done ? '✓' : '★'}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className={`truncate font-bold ${r.done ? 'text-ink/45 line-through' : ''}`}>{r.title}</p>
+                <span className="shrink-0 text-sm font-extrabold">+G$ {gdFmt(r.amountGd)}</span>
+              </div>
+              {!r.done && (
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink/10">
+                    <div className="h-full rounded-full bg-mandarin" style={{ width: `${Math.max(r.progress * 100, 4)}%` }} />
+                  </div>
+                  <span className="text-xs font-bold text-ink/45">{r.detail}</span>
+                </div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <button
+        onClick={() => {
+          navigator.clipboard?.writeText(user.inviteLink).then(() => flash('Invite link copied — G$ 1,000 per friend who joins'), () => flash(user.inviteLink))
+        }}
+        className="mt-4 w-full rounded-2xl bg-cream py-3 text-sm font-extrabold ring-2 ring-ink/10 hover:ring-ink/30"
+      >
+        Copy my invite link
+      </button>
+    </section>
+  )
+}
+
+function ProfileSheet({ state, onClose, onSave }: { state: State; onClose: () => void; onSave: (p: { skills: string[]; city: string }) => Promise<void> }) {
+  const [skills, setSkills] = useState<string[]>(state.user.skills)
+  const [city, setCity] = useState(state.user.city ?? '')
+  const [saving, setSaving] = useState(false)
+  const toggle = (s: string) => setSkills((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="animate-pop max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[2rem] bg-cream sm:rounded-[2rem] sm:border-[4px] sm:border-ink sm:shadow-chunk-lg">
+        <div className="flex items-center justify-between bg-crest px-6 py-5">
+          <div>
+            <h3 className="text-2xl font-extrabold">What can you do?</h3>
+            <p className="text-sm font-semibold text-ink/65">Jarra uses this to find you gigs paid in G$.</p>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-ink/10 font-bold hover:bg-ink/20" aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div className="grid gap-5 p-6">
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(state.options.skills).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => toggle(id)}
+                className={`rounded-full px-3.5 py-2 text-sm font-bold transition ${skills.includes(id) ? 'bg-forest text-cream' : 'bg-white ring-2 ring-ink/10 hover:ring-ink/30'}`}
+              >
+                {skills.includes(id) ? '✓ ' : ''}
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="grid gap-2">
+            <span className="text-sm font-extrabold tracking-wide text-ink/60 uppercase">Your city</span>
+            <select value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-3 font-semibold outline-none focus:border-ink">
+              <option value="">Anywhere / remote only</option>
+              {state.options.cities.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true)
+              await onSave({ skills, city })
+              setSaving(false)
+            }}
+            className="press w-full rounded-2xl border-[3px] border-ink bg-mandarin py-4 text-lg font-extrabold shadow-chunk disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Find me work'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
 function DemoControls({
   run,
   setState,
-  flash,
   rate,
+  onRunAgent,
 }: {
   run: (label: string, fn: () => Promise<void>) => Promise<void>
   setState: (s: State) => void
-  flash: (t: string) => void
   rate: number
+  onRunAgent: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const item = 'rounded-xl bg-cream/10 px-3 py-2 text-left text-sm font-bold hover:bg-cream/20'
   return (
     <div className="fixed right-4 bottom-20 z-40 lg:bottom-6">
       {open ? (
-        <div className="animate-pop w-60 rounded-2xl bg-ink p-3 text-cream shadow-[0_12px_32px_rgba(11,31,22,0.4)]">
+        <div className="animate-pop w-64 rounded-2xl bg-ink p-3 text-cream shadow-[0_12px_32px_rgba(11,31,22,0.4)]">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-bold tracking-widest text-cream/50 uppercase">Demo controls</p>
             <button onClick={() => setOpen(false)} className="text-cream/50 hover:text-cream" aria-label="Close demo controls">
@@ -527,26 +849,23 @@ function DemoControls({
           </div>
           <div className="grid gap-2">
             <button
-              onClick={() => run('dep', async () => setState(await api<State>('/api/demo/deposit', { gd: 5000 })))}
-              className="rounded-xl bg-cream/10 px-3 py-2 text-left text-sm font-bold hover:bg-cream/20"
-            >
-              Deposit G$ 5,000
-            </button>
-            <button
               onClick={() =>
                 run('day', async () => {
                   await api<State>('/api/demo/deposit', { action: 'next-day' })
-                  const r = await api<{ message: string; state: State }>('/api/claim', {})
-                  setState(r.state)
-                  flash(r.message.split('\n')[0])
+                  onRunAgent()
                 })
               }
-              className="rounded-xl bg-cream/10 px-3 py-2 text-left text-sm font-bold hover:bg-cream/20"
+              className={item}
             >
-              Skip to tomorrow
+              ⏭ Skip to tomorrow (agent runs)
+            </button>
+            <button onClick={() => run('dep', async () => setState(await api<State>('/api/demo/deposit', { gd: 5000 })))} className={item}>
+              ＋ Deposit G$ 5,000
             </button>
           </div>
-          <p className="mt-2 text-[11px] font-semibold text-cream/40">Simulated G$ · 1 G$ = ₦{rate.toFixed(3)}</p>
+          <p className="mt-2 text-[11px] font-semibold text-cream/40">
+            Simulated G$ · 1 G$ = ₦{rate.toFixed(3)}
+          </p>
         </div>
       ) : (
         <button onClick={() => setOpen(true)} className="rounded-full bg-ink px-4 py-2 text-xs font-bold tracking-widest text-cream/80 uppercase shadow-lg hover:text-cream">
@@ -564,6 +883,7 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
   const [disco, setDisco] = useState(jar.details.disco ?? 'kaduna')
   const [meterType, setMeterType] = useState(jar.details.meterType ?? 'prepaid')
   const [meter, setMeter] = useState(jar.details.meterNumber ?? '')
+  const [every, setEvery] = useState<number | null>(jar.everyDays)
   const [saving, setSaving] = useState(false)
   const presets = jar.kind === 'light' ? [2000, 3000, 5000, 10000] : jar.kind === 'data' ? [500, 1000, 1500, 3000] : [200, 500, 1000, 2000]
   const field = 'w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-3 font-semibold outline-none focus:border-ink'
@@ -627,10 +947,26 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
             </div>
           )}
 
+          <div>
+            <p className="mb-2 text-sm font-extrabold tracking-wide text-ink/60 uppercase">This bill comes round</p>
+            <div className="grid grid-cols-4 gap-2">
+              {[null, 7, 14, 30].map((d) => (
+                <button
+                  key={String(d)}
+                  onClick={() => setEvery(d)}
+                  className={`rounded-xl py-2.5 text-sm font-extrabold transition ${every === d ? 'bg-ink text-cream' : 'bg-white ring-2 ring-ink/10 hover:ring-ink/30'}`}
+                >
+                  {d ? `${d} days` : 'When full'}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs font-semibold text-ink/50">Jarra tops this jar up before it’s due and pays on time.</p>
+          </div>
+
           <button onClick={() => setAutoPay(!autoPay)} className="flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left ring-2 ring-ink/10">
             <span>
               <span className="block font-extrabold">Pay automatically</span>
-              <span className="text-sm font-semibold text-ink/55">When the jar reaches {formatNgn(target)}</span>
+              <span className="text-sm font-semibold text-ink/55">{every ? `Every ${every} days, ${formatNgn(target)}` : `When the jar reaches ${formatNgn(target)}`}</span>
             </span>
             <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${autoPay ? 'bg-forest' : 'bg-ink/15'}`}>
               <span className={`absolute top-1 h-5 w-5 rounded-full bg-cream shadow transition-all ${autoPay ? 'left-6' : 'left-1'}`} />
@@ -643,8 +979,8 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
               setSaving(true)
               await onSave(
                 jar.kind === 'light'
-                  ? { targetNgn: target, autoPay, disco, meterType, meterNumber: meter || undefined }
-                  : { targetNgn: target, autoPay, phone: phone || undefined },
+                  ? { targetNgn: target, autoPay, everyDays: every, disco, meterType, meterNumber: meter || undefined }
+                  : { targetNgn: target, autoPay, everyDays: every, phone: phone || undefined },
               )
               setSaving(false)
             }}
@@ -659,49 +995,55 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
 }
 
 const ACT_STYLE: Record<string, { icon: string; tint: string; sign: '+' | '−' | '' }> = {
-  claim: { icon: '☀️', tint: 'bg-crest', sign: '+' },
+  claim: { icon: '☀', tint: 'bg-crest', sign: '+' },
   deposit: { icon: '＋', tint: 'bg-crest-soft', sign: '+' },
-  reward: { icon: '🔥', tint: 'bg-mandarin', sign: '+' },
+  reward: { icon: '★', tint: 'bg-cream ring-2 ring-ink/15', sign: '+' },
   refund: { icon: '↩', tint: 'bg-crest-soft', sign: '+' },
-  pay: { icon: '✓', tint: 'bg-forest text-cream', sign: '−' },
+  pay: { icon: '✓', tint: 'bg-mandarin', sign: '−' },
   move: { icon: '→', tint: 'bg-cream', sign: '' },
+  work: { icon: '⌕', tint: 'bg-forest-soft text-cream', sign: '' },
+  earn: { icon: '₲', tint: 'bg-forest text-cream', sign: '+' },
+  agent: { icon: '🫙', tint: 'bg-ink text-cream', sign: '' },
 }
 
-function ActivityList({ items, chainMode }: { items: Activity[]; chainMode: string }) {
-  if (!items.length) return <p className="rounded-2xl bg-white p-6 text-center font-semibold text-ink/50 ring-2 ring-ink/10">Nothing yet. Claim today’s G$ to start.</p>
+function AgentLog({ items, chainMode }: { items: Activity[]; chainMode: string }) {
+  if (!items.length) return <p className="rounded-2xl bg-white p-6 text-center font-semibold text-ink/50 ring-2 ring-ink/10">Nothing yet. Tap “Check in now” to put Jarra to work.</p>
   return (
     <ul className="overflow-hidden rounded-2xl bg-white ring-2 ring-ink/10">
-      {items.slice(0, 8).map((a, i) => {
-        const st = ACT_STYLE[a.type] ?? ACT_STYLE.move
-        const gd = a.amountWei ? Number(BigInt(a.amountWei) / 10n ** 18n) : null
-        return (
-          <li key={a.id} className={`flex items-center gap-3 px-4 py-3 ${i ? 'border-t border-ink/10' : ''}`}>
-            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-base font-extrabold ${a.status === 'failed' ? 'bg-red-100' : st.tint}`}>
-              {a.status === 'failed' ? '!' : st.icon}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">{a.title}</p>
-              <p className="truncate text-sm font-medium text-ink/50">
-                {a.detail ?? new Date(a.createdAt).toLocaleString('en-NG', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
-                {a.status === 'pending' && ' · processing'}
-                {a.txHash && chainMode === 'celo' && (
-                  <>
-                    {' · '}
-                    <a href={`https://celoscan.io/tx/${a.txHash}`} target="_blank" rel="noreferrer" className="underline">
-                      receipt
-                    </a>
-                  </>
-                )}
-              </p>
-            </div>
-            {gd !== null && st.sign && (
-              <span className={`shrink-0 font-extrabold tabular-nums ${st.sign === '+' ? 'text-forest' : 'text-ink'}`}>
-                {st.sign}G$ {gd.toLocaleString()}
+      {items
+        .filter((a) => a.type !== 'agent')
+        .slice(0, 10)
+        .map((a, i) => {
+          const st = ACT_STYLE[a.type] ?? ACT_STYLE.move
+          const gd = a.amountWei ? Number(BigInt(a.amountWei) / 10n ** 18n) : null
+          return (
+            <li key={a.id} className={`flex items-center gap-3 px-4 py-3 ${i ? 'border-t border-ink/10' : ''}`}>
+              <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-base font-extrabold ${a.status === 'failed' ? 'bg-red-100' : st.tint}`}>
+                {a.status === 'failed' ? '!' : st.icon}
               </span>
-            )}
-          </li>
-        )
-      })}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-bold">{a.title}</p>
+                <p className="truncate text-sm font-medium text-ink/50">
+                  {a.detail ?? ago(a.createdAt)}
+                  {a.status === 'pending' && ' · processing'}
+                  {a.txHash && chainMode === 'celo' && (
+                    <>
+                      {' · '}
+                      <a href={`https://celoscan.io/tx/${a.txHash}`} target="_blank" rel="noreferrer" className="underline">
+                        receipt
+                      </a>
+                    </>
+                  )}
+                </p>
+              </div>
+              {gd !== null && st.sign && (
+                <span className={`shrink-0 font-extrabold tabular-nums ${st.sign === '+' ? 'text-forest' : 'text-ink'}`}>
+                  {st.sign}G$ {gd.toLocaleString()}
+                </span>
+              )}
+            </li>
+          )
+        })}
     </ul>
   )
 }
@@ -719,7 +1061,7 @@ function TelegramChip({ state }: { state: State }) {
 
 // ---------- chat ----------
 
-const CHIPS = ['What’s in my jars?', '₦200 airtime for me', '1GB data', 'Buy ₦3000 light']
+const CHIPS = ['Find me work', '₦200 airtime for me', 'My rewards', 'What’s in my jars?', 'Buy ₦3000 light']
 
 function Chat({ state, setState, flash }: { state: State; setState: (s: State) => void; flash: (t: string) => void }) {
   const [text, setText] = useState('')
@@ -768,7 +1110,7 @@ function Chat({ state, setState, flash }: { state: State; setState: (s: State) =
         {state.messages.length === 0 && !optimistic && (
           <ChatBubble
             me={false}
-            text={`Hi${state.user.name ? ` ${state.user.name}` : ''}! I’m your AI bill agent. Tell me what to pay — airtime, data or light — and I’ll show you before I pay anything.`}
+            text={`Hi${state.user.name ? ` ${state.user.name}` : ''}! I’m your AI agent. I save your G$, pay your bills, find you rewards and paid work. Ask me anything — I’ll always show you before I pay.`}
           />
         )}
         {state.messages.map((m) => (

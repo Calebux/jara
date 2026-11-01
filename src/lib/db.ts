@@ -52,6 +52,36 @@ const SCHEMA = [
     created_at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS messages_user_idx ON messages (user_id, id)`,
+  // Gigs: small jobs paid in G$. Funded up front by the poster (or the Jarra treasury).
+  `CREATE TABLE IF NOT EXISTS gigs (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    reward_gd INTEGER NOT NULL,
+    skills TEXT NOT NULL DEFAULT '[]',
+    city TEXT,
+    poster TEXT NOT NULL,
+    slots INTEGER NOT NULL DEFAULT 1,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS gig_claims (
+    gig_id TEXT NOT NULL REFERENCES gigs (id),
+    user_id TEXT NOT NULL REFERENCES users (id),
+    status TEXT NOT NULL,
+    proof TEXT,
+    score REAL NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (gig_id, user_id)
+  )`,
+  // One row per reward a user has received, keyed so each reward pays once per period.
+  `CREATE TABLE IF NOT EXISTS rewards_paid (
+    user_id TEXT NOT NULL REFERENCES users (id),
+    reward_key TEXT NOT NULL,
+    amount_gd INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, reward_key)
+  )`,
   // Simulated balances for CHAIN_MODE=mock.
   `CREATE TABLE IF NOT EXISTS mock_balances (address TEXT PRIMARY KEY, wei TEXT NOT NULL)`,
 ]
@@ -71,6 +101,21 @@ async function connect(): Promise<Client> {
   if (url.startsWith('file:')) mkdirSync(path.dirname(url.slice('file:'.length)), { recursive: true })
   const client = createClient({ url, authToken })
   await client.batch(SCHEMA, 'write')
+  // Columns added after the first release.
+  for (const sql of [
+    'ALTER TABLE users ADD COLUMN skills TEXT NOT NULL DEFAULT \'[]\'',
+    'ALTER TABLE users ADD COLUMN city TEXT',
+    'ALTER TABLE users ADD COLUMN referred_by TEXT',
+    'ALTER TABLE users ADD COLUMN last_run_at INTEGER',
+    'ALTER TABLE jars ADD COLUMN every_days INTEGER',
+    'ALTER TABLE jars ADD COLUMN last_paid_at INTEGER',
+  ]) {
+    try {
+      await client.execute(sql)
+    } catch {
+      /* column already exists */
+    }
+  }
   return client
 }
 

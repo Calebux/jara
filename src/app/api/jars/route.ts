@@ -21,6 +21,7 @@ export async function POST(req: Request) {
     disco?: string
     meterType?: string
     meterNumber?: string
+    everyDays?: number | null
   }
   if (!isJarKind(body.kind)) return bad('Unknown jar')
   const details: JarDetails = {}
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
     Object.assign(details, { disco: body.disco, meterType, meterNumber: meter, customerName: check.customerName })
   }
   const target = typeof body.targetNgn === 'number' && Number.isFinite(body.targetNgn) ? Math.min(Math.max(body.targetNgn, 0), serverConfig().limits.maxBillNgn) : undefined
-  await updateJar(user.id, body.kind, { targetNgn: target, autoPay: typeof body.autoPay === 'boolean' ? body.autoPay : undefined, details })
+  const every = body.everyDays === null ? null : typeof body.everyDays === 'number' && body.everyDays > 0 ? Math.min(Math.round(body.everyDays), 60) : undefined
+  await updateJar(user.id, body.kind, { targetNgn: target, autoPay: typeof body.autoPay === 'boolean' ? body.autoPay : undefined, details, ...(every !== undefined ? { everyDays: every } : {}) })
   return NextResponse.json(await userState((await getUserById(user.id))!))
 }

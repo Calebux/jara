@@ -9,6 +9,9 @@ import { runDaily } from '../daily'
 import { getUserById, isJarKind, listActivity, updateUser, type JarKind, type PendingAction, type User } from '../users'
 import { chat, llmReachable, type ChatMessage, type ToolDef } from './llm'
 import { fallbackIntent } from './fallback'
+import { runAgent } from './routine'
+import { CITIES, SKILLS, acceptGig, isSkill, matchGigs, submitGig, userGigs } from '../gigs'
+import { rewardProgress } from '../rewards'
 
 export interface AgentReply {
   text: string
@@ -87,6 +90,56 @@ const TOOLS: ToolDef[] = [
   },
   {
     type: 'function',
+    function: {
+      name: 'find_work',
+      description: 'Small jobs paid in G$ that Jarra found for the user (and searches for new ones). Returns id, title, pay, status.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'accept_gig',
+      description: 'User wants to take a gig.',
+      parameters: { type: 'object', properties: { gig_id: { type: 'string' } }, required: ['gig_id'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'finish_gig',
+      description: 'User says they finished an accepted gig; include what they did as proof.',
+      parameters: { type: 'object', properties: { gig_id: { type: 'string' }, proof: { type: 'string' } }, required: ['gig_id'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'set_profile',
+      description: 'Save what the user can do and where they live, so Jarra can find them paid work.',
+      parameters: {
+        type: 'object',
+        properties: {
+          skills: { type: 'array', items: { type: 'string', enum: Object.keys(SKILLS) } },
+          city: { type: 'string', enum: [...CITIES] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: { name: 'my_rewards', description: 'G$ rewards earned so far and what the user is close to earning.', parameters: { type: 'object', properties: {} } },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_agent',
+      description: 'Do a full check-in now: claim G$, fill jars, pay due bills, collect rewards, find work.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
     function: { name: 'recent_activity', description: 'The last few things Jarra did (claims, payments, rewards).', parameters: { type: 'object', properties: {} } },
   },
 ]
@@ -96,13 +149,15 @@ function systemPrompt(user: User, snap: Snapshot): string {
     .map((j) => `${j.label}: ${formatNgn(j.balanceNgn)} of ${formatNgn(j.targetNgn)} (${j.pct}%)${j.autoPay ? ', auto-pay on' : ''}`)
     .join('; ')
   return [
-    'You are Jarra, a friendly money helper in Nigeria. You quietly claim the user\'s free daily GoodDollar (G$),',
-    'save it into jars (Light, Data, Airtime) and pay small bills from them.',
+    'You are Jarra, an AI agent for everyday life in Nigeria. G$ (GoodDollar) drives everything you do.',
+    'You quietly handle four jobs: SAVE (claim free daily G$ into jars: Light, Data, Airtime), PAY (bills from the jars),',
+    'find REWARDS (G$ bonuses) and find WORK (small gigs paid in G$, matched to the user\'s skills and city).',
     'Talk like a warm Nigerian friend: short, simple English; understand Pidgin and reply in Pidgin if the user writes Pidgin.',
     'Never use crypto jargon (no "wallet", "token", "gas", "blockchain") unless the user asks. Say "your jar" and "G$".',
     'Always use propose_bill for payments — never claim something is paid until the system confirms it.',
     'After propose_bill succeeds, ask the user to confirm in one short line.',
     'Keep replies under 60 words. Use naira amounts.',
+    `Skills: ${user.skills.join(', ') || 'unknown'}. City: ${user.city ?? 'unknown'}.`,
     `User: ${user.name ?? 'friend'}. Streak: ${user.streak} days. Jars: ${jars}. Free: ${formatNgn(snap.freeNgn)}. 1 G$ = ₦${snap.ngnPerGd.toFixed(4)}.`,
   ].join(' ')
 }
@@ -178,6 +233,31 @@ async function executeTool(user: User, name: string, args: Record<string, unknow
       if (!fresh.connected) return 'error: user has not connected their GoodDollar account yet; tell them to finish setup in the app'
       const r = await runDaily(fresh)
       return r.claimed > 0n ? r.message : 'already claimed today; next claim tomorrow'
+    }
+    case 'find_work': {
+      const fresh = (await getUserById(user.id))!
+      await matchGigs(fresh)
+      const gigs = (await userGigs(user.id)).filter((g) => g.status !== 'paid')
+      return gigs.length
+        ? JSON.stringify(gigs.map((g) => ({ id: g.id, title: g.title, pays_gd: g.rewardGd, status: g.status, by: g.poster })))
+        : 'no gigs matched yet — ask the user what they can do (skills) and their city, then call set_profile'
+    }
+    case 'accept_gig':
+      return acceptGig(user, String(args.gig_id ?? ''))
+    case 'finish_gig':
+      return submitGig(user, String(args.gig_id ?? ''), String(args.proof ?? 'Done'))
+    case 'set_profile': {
+      const skills = Array.isArray(args.skills) ? args.skills.filter(isSkill) : user.skills
+      const city = typeof args.city === 'string' && (CITIES as readonly string[]).includes(args.city) ? args.city : user.city
+      await updateUser(user.id, { skills, city })
+      return `saved skills: ${skills.join(', ') || 'none'}; city: ${city ?? 'not set'}`
+    }
+    case 'my_rewards':
+      return JSON.stringify(await rewardProgress(user))
+    case 'run_agent': {
+      const fresh = (await getUserById(user.id))!
+      if (!fresh.connected) return 'error: user has not connected their GoodDollar account yet'
+      return (await runAgent(user.id)).message
     }
     case 'recent_activity':
       return JSON.stringify((await listActivity(user.id, 6)).map((a) => ({ title: a.title, status: a.status, when: new Date(a.createdAt).toISOString() })))
@@ -269,6 +349,20 @@ async function rulesRespond(user: User, text: string, snap: Snapshot): Promise<A
       const t = await executeTool(user, 'claim_now', {}, out)
       return { text: t.replace(/^error: /, ''), engine: 'rules' }
     }
+    case 'work': {
+      const t = await executeTool(user, 'find_work', {}, out)
+      if (t.startsWith('no gigs')) return { text: 'Tell me what you can do so I can find you paid work — e.g. "I can type and speak Hausa, I live in Kaduna". Or set it in the Work tab.', engine: 'rules' }
+      const gigs = JSON.parse(t) as { title: string; pays_gd: number; status: string }[]
+      return { text: `Work I found for you:\n${gigs.map((g) => `• ${g.title} — G$ ${g.pays_gd.toLocaleString()}${g.status === 'accepted' ? ' (in progress)' : ''}`).join('\n')}\n\nOpen the Work tab to take one.`, engine: 'rules' }
+    }
+    case 'rewards': {
+      const p = await rewardProgress(user)
+      return { text: `You've earned G$ ${p.earnedGd.toLocaleString()} in rewards.\n${p.items.filter((i) => !i.done).map((i) => `• ${i.title}: ${i.detail} → G$ ${i.amountGd}`).join('\n')}`, engine: 'rules' }
+    }
+    case 'run': {
+      const t = await executeTool(user, 'run_agent', {}, out)
+      return { text: t.replace(/^error: /, ''), engine: 'rules' }
+    }
     case 'move': {
       const t = await executeTool(user, 'move_to_jar', { jar: intent.jar, amount_ngn: intent.amountNgn }, out)
       return { text: t.startsWith('error') ? "There's no free G$ to move right now." : `Done — ${t.replace('moved', 'moved')} into ${intent.jar}.`, engine: 'rules' }
@@ -277,7 +371,7 @@ async function rulesRespond(user: User, text: string, snap: Snapshot): Promise<A
       const light = snap.jars.find((j) => j.kind === 'light')
       const disco = light && isDisco(light.details.disco) ? ` (${DISCO_INFO[light.details.disco].short})` : ''
       return {
-        text: `I can pay airtime, data and light${disco} from your jars. Try:\n• "₦500 airtime to 0803 123 4567"\n• "1GB data for me"\n• "Buy ₦3000 light"\n• "How much is in my jars?"`,
+        text: `I save your G$, pay airtime, data and light${disco}, find rewards and find you paid work. Try:\n• "₦500 airtime to 0803 123 4567"\n• "1GB data for me"\n• "Buy ₦3000 light"\n• "Find me work"\n• "My rewards"`,
         engine: 'rules',
       }
     }

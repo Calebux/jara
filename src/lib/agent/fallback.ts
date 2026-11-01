@@ -6,6 +6,9 @@ export type Intent =
   | { type: 'balance' }
   | { type: 'claim' }
   | { type: 'move'; jar: 'airtime' | 'data' | 'light'; amountNgn: number }
+  | { type: 'work' }
+  | { type: 'rewards' }
+  | { type: 'run' }
   | { type: 'help' }
 
 function amount(text: string): number | undefined {
@@ -39,6 +42,9 @@ export function fallbackIntent(raw: string): Intent {
   if (/\b(airtime|recharge|credit|card|top ?up|vtu)\b/.test(text)) {
     return { type: 'bill', kind: 'airtime', amountNgn: amount(textNoPhone), phone: phone(text) }
   }
+  if (/\b(work|job|jobs|gig|gigs|hustle|earn|money to make)\b/.test(text)) return { type: 'work' }
+  if (/\b(reward|rewards|bonus|bonuses|cashback)\b/.test(text)) return { type: 'rewards' }
+  if (/\b(check in|run|do your thing|handle (it|everything))\b/.test(text)) return { type: 'run' }
   if (/\b(claim|collect|ubi)\b/.test(text)) return { type: 'claim' }
   if (/\b(balance|jar|jars|how much|wetin dey|remain|left|saved?)\b/.test(text)) return { type: 'balance' }
   return { type: 'help' }
