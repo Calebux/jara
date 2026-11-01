@@ -30,7 +30,7 @@ const TOOLS: ToolDef[] = [
     type: 'function',
     function: {
       name: 'get_jars',
-      description: "Current jar balances (G$ and naira value), targets, saved phone/meter details and free balance.",
+      description: "Current jar balances (G$ and naira value), targets, saved phone/meter details and spare (unallocated) balance.",
       parameters: { type: 'object', properties: {} },
     },
   },
@@ -58,7 +58,7 @@ const TOOLS: ToolDef[] = [
     type: 'function',
     function: {
       name: 'move_to_jar',
-      description: 'Move naira-worth of G$ into a jar from free balance or other jars.',
+      description: 'Move naira-worth of G$ into a jar from the spare balance or other jars.',
       parameters: {
         type: 'object',
         properties: { jar: { type: 'string', enum: ['light', 'data', 'airtime'] }, amount_ngn: { type: 'number' } },
@@ -141,7 +141,7 @@ function systemPrompt(user: User, snap: Snapshot): string {
     'Always use propose_bill for payments — never claim something is paid until the system confirms it.',
     'After propose_bill succeeds, ask the user to confirm in one short line.',
     'Keep replies under 60 words. Use naira amounts.',
-    `User: ${user.name ?? 'friend'}. Streak: ${user.streak} days. Jars: ${jars}. Free: ${formatNgn(snap.freeNgn)}. 1 G$ = ₦${snap.ngnPerGd.toFixed(4)}.`,
+    `User: ${user.name ?? 'friend'}. Streak: ${user.streak} days. Jars: ${jars}. Spare: ${formatNgn(snap.freeNgn)}. 1 G$ = ₦${snap.ngnPerGd.toFixed(4)}.`,
   ].join(' ')
 }
 
@@ -315,7 +315,7 @@ async function rulesRespond(user: User, text: string, snap: Snapshot): Promise<A
     }
     case 'balance':
       return {
-        text: [...snap.jars.map((j) => `${j.emoji} ${j.label}: ${formatNgn(j.balanceNgn)} / ${formatNgn(j.targetNgn)} (${j.pct}%)`), `Free: ${formatNgn(snap.freeNgn)}`].join('\n'),
+        text: [...snap.jars.map((j) => `${j.emoji} ${j.label}: ${formatNgn(j.balanceNgn)} / ${formatNgn(j.targetNgn)} (${j.pct}%)`), `Spare: ${formatNgn(snap.freeNgn)}`].join('\n'),
         engine: 'rules',
       }
     case 'claim': {
