@@ -5,9 +5,9 @@ import './globals.css'
 const bricolage = Bricolage_Grotesque({ variable: '--font-bricolage', subsets: ['latin'], weight: ['400', '500', '600', '700', '800'] })
 
 export const metadata: Metadata = {
-  title: 'Jarra — your free G$ pays your bills',
+  title: 'Jarra — the AI agent that pays your bills with free G$',
   description:
-    'Jarra is an AI helper that claims your free daily GoodDollar, saves it in jars and pays your light, data and airtime. No crypto talk.',
+    'Jarra is an AI agent that claims your free daily GoodDollar, saves it in jars and pays your light, data and airtime. No crypto talk.',
 }
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#0f3d2a' }

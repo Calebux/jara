@@ -42,7 +42,7 @@ export default function Home() {
       <section className="relative overflow-hidden border-b-[4px] border-ink bg-forest text-cream">
         <div className="mx-auto max-w-7xl px-4 pt-8 pb-16 sm:px-6 lg:pt-12 lg:pb-20">
           <p className="inline-flex items-center gap-2 rounded-full border-[3px] border-ink bg-crest px-4 py-1.5 text-sm font-extrabold text-ink uppercase shadow-chunk-sm">
-            <span className="h-2.5 w-2.5 rounded-full bg-mandarin" /> Powered by your daily GoodDollar
+            <span className="h-2.5 w-2.5 rounded-full bg-mandarin" /> 🤖 Your AI bill agent · Powered by GoodDollar
           </p>
 
           <div className="relative mt-6">
@@ -82,7 +82,7 @@ export default function Home() {
           <div className="mt-12 grid items-end gap-10 lg:mt-16 lg:grid-cols-[1fr_auto]">
             <div>
               <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
-                A helper in your chat that collects your free GoodDollar every day, saves it in jars —{' '}
+                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> in your chat. It collects your free GoodDollar every day, saves it in jars —{' '}
                 <span className="text-crest">Light, Data, Airtime</span> — and pays them for you.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
@@ -103,7 +103,7 @@ export default function Home() {
             </div>
 
             <div className="relative w-full max-w-sm rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-cream p-5 text-ink shadow-chunk-lg lg:mb-2">
-              <p className="text-sm font-extrabold text-forest uppercase">Jarra · 7:02am</p>
+              <p className="text-sm font-extrabold text-forest uppercase">🤖 Jarra AI agent · 7:02am</p>
               <p className="mt-1 text-lg leading-snug font-bold">Light jar don full 🎉 I&apos;ve paid ₦3,000 for your meter.</p>
               <p className="mt-2 rounded-xl bg-crest px-3 py-1.5 font-mono text-sm font-bold">4021 7781 0093 2215 6650</p>
             </div>
@@ -115,7 +115,7 @@ export default function Home() {
       <section className="grain bg-cream py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <h2 className="max-w-2xl text-4xl leading-none font-extrabold tracking-tight sm:text-6xl">
-            Three things. <span className="text-mandarin">Every day.</span> Without you lifting a finger.
+            One AI agent. <span className="text-mandarin">Three jobs.</span> Every single day.
           </h2>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {[
@@ -166,7 +166,7 @@ export default function Home() {
               Talk to it like <span className="text-crest">your person.</span>
             </h2>
             <p className="mt-6 max-w-lg text-lg text-cream/80">
-              English or Pidgin. Jarra always shows you what it&apos;s about to pay, and waits for your “yes”.
+              Jarra is an AI agent that understands English and Pidgin. It works out what you mean, shows you exactly what it&apos;s about to pay, and waits for your “yes”.
             </p>
           </div>
           <div className="space-y-3 rounded-[2rem] border-[3px] border-ink bg-cream p-5 text-ink shadow-chunk-lg">
