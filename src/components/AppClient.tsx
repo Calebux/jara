@@ -101,14 +101,18 @@ export function AppClient({ tgCode, refCode }: { tgCode?: string; refCode?: stri
   useEffect(() => {
     ;(async () => {
       if (tgCode) {
-        setState(await api<State>('/api/session', { tg: tgCode }))
         window.history.replaceState(null, '', '/app')
-        return
+        try {
+          setState(await api<State>('/api/session', { tg: tgCode }))
+          return
+        } catch (err) {
+          flash(err instanceof Error ? err.message : 'That link has expired. Send /start to the bot.')
+        }
       }
       const s = await api<State | { user: null }>('/api/session')
       setState(s.user ? (s as State) : null)
     })().catch(() => setState(null))
-  }, [tgCode])
+  }, [tgCode, flash])
 
   return (
     <div className="min-h-dvh bg-cream">

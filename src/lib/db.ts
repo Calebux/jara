@@ -104,6 +104,9 @@ async function connect(): Promise<Client> {
     'ALTER TABLE users ADD COLUMN city TEXT',
     'ALTER TABLE users ADD COLUMN referred_by TEXT',
     'ALTER TABLE users ADD COLUMN last_run_at INTEGER',
+    // Public referral code, kept separate from link_code (which signs people in).
+    'ALTER TABLE users ADD COLUMN ref_code TEXT',
+    'CREATE UNIQUE INDEX IF NOT EXISTS users_ref_code_idx ON users (ref_code)',
     'ALTER TABLE jars ADD COLUMN every_days INTEGER',
     'ALTER TABLE jars ADD COLUMN last_paid_at INTEGER',
   ]) {

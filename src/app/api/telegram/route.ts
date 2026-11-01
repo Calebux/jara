@@ -1,9 +1,10 @@
+import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { handleMessage, resolvePending } from '@/lib/agent'
 import { run } from '@/lib/db'
 import { serverConfig } from '@/lib/env'
 import { CONFIRM_KEYBOARD, answerCallback, editKeyboard, sendMessage, sendTyping } from '@/lib/telegram'
-import { createUser, getUserByLinkCode, getUserByTelegram, linkTelegram } from '@/lib/users'
+import { createUser, getUserByLinkCode, getUserByTelegram, linkTelegram, rotateLinkCode } from '@/lib/users'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,8 +14,11 @@ interface Update {
 }
 
 export async function POST(req: Request) {
+  // Fail closed: without a configured secret, anyone could post fake updates as any chat.
   const { webhookSecret } = serverConfig().telegram
-  if (webhookSecret && req.headers.get('x-telegram-bot-api-secret-token') !== webhookSecret) {
+  const got = Buffer.from(req.headers.get('x-telegram-bot-api-secret-token') ?? '')
+  const want = Buffer.from(webhookSecret)
+  if (!webhookSecret || got.length !== want.length || !timingSafeEqual(got, want)) {
     return NextResponse.json({ ok: false }, { status: 401 })
   }
   const update = (await req.json()) as Update
@@ -53,6 +57,7 @@ async function handle(update: Update) {
     const linked = code ? await getUserByLinkCode(code) : null
     if (linked) {
       await linkTelegram(linked.id, chatId)
+      await rotateLinkCode(linked.id)
       await sendMessage(chatId, `You're linked${linked.name ? `, ${linked.name}` : ''} 🙌 I'll message you here every morning after I claim your G$.\n\nTry: "How much is in my jars?"`)
       return
     }

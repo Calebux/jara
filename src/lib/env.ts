@@ -55,6 +55,7 @@ export function serverConfig() {
       model: process.env.LLM_MODEL || 'deepseek-v4-flash',
       antseedPeer: process.env.ANTSEED_PIN_PEER || '',
       disabled: process.env.LLM_DISABLED === 'true',
+      dailyCallCap: Number(process.env.LLM_DAILY_CALL_CAP) || 3000,
     },
     telegram: {
       botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',

@@ -6,7 +6,7 @@ import { snapshot } from '@/lib/jars'
 import { botLink } from '@/lib/telegram'
 import { AI_TOOLS, listAiRuns } from '@/lib/ai-tools'
 import { rewardProgress } from '@/lib/rewards'
-import { listActivity, type User } from '@/lib/users'
+import { listActivity, type User, ensureRefCode } from '@/lib/users'
 
 export async function userState(user: User) {
   const cfg = serverConfig()
@@ -30,7 +30,7 @@ export async function userState(user: User) {
       telegramLink: botLink(user.linkCode),
       hasPending: Boolean(user.pending),
       lastRunAt: user.lastRunAt,
-      inviteLink: `${cfg.appUrl}/app?ref=${user.linkCode}`,
+      inviteLink: `${cfg.appUrl}/app?ref=${await ensureRefCode(user)}`,
     },
     aiRuns,
     aiTools: Object.entries(AI_TOOLS).map(([id, t]) => ({ id, name: t.name, blurb: t.blurb, priceGd: t.priceGd, placeholder: t.placeholder })),

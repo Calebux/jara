@@ -1,4 +1,5 @@
 import { serverConfig } from '../env'
+import { rateLimit } from '../ratelimit'
 
 // Minimal OpenAI Chat Completions client. Points at the AntSeed buyer proxy by
 // default (localhost:8377), which routes to a peer and settles in USDC on Base.
@@ -30,6 +31,9 @@ export async function chat(messages: ChatMessage[], tools: ToolDef[], maxTokens 
     authorization: `Bearer ${cfg.apiKey}`,
   }
   if (cfg.antseedPeer) headers['x-antseed-pin-peer'] = cfg.antseedPeer
+  // Global budget guard: every call costs USDC on AntSeed. Past the daily cap the
+  // agent falls back to rules and AI helpers say "busy" without charging anyone.
+  if (!rateLimit('llm:global', cfg.dailyCallCap, 24 * 60 * 60_000)) throw new Error('LLM daily call cap reached')
   const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
     headers,

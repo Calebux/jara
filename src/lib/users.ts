@@ -41,7 +41,10 @@ export interface User {
   name: string | null
   sessionToken: string
   tgChatId: string | null
+  /** Secret, single-use sign-in/link code (Telegram buttons). Rotated after each use. */
   linkCode: string
+  /** Public referral code for invite links. Never signs anyone in. */
+  refCode: string | null
   rootAddress: `0x${string}` | null
   agentAddress: `0x${string}`
   agentKeyEnc: string
@@ -63,6 +66,7 @@ function toUser(r: Row): User {
     sessionToken: r.session_token as string,
     tgChatId: (r.tg_chat_id as string) ?? null,
     linkCode: r.link_code as string,
+    refCode: (r.ref_code as string | null) ?? null,
     rootAddress: (r.root_address as `0x${string}`) ?? null,
     agentAddress: r.agent_address as `0x${string}`,
     agentKeyEnc: r.agent_key_enc as string,
@@ -94,7 +98,7 @@ export async function createUser(input: { name?: string; tgChatId?: string; refe
       input.name ?? null,
       randomBytes(24).toString('hex'),
       input.tgChatId ?? null,
-      randomBytes(5).toString('hex'),
+      randomBytes(12).toString('hex'),
       wallet.address,
       wallet.encryptedKey,
       Date.now(),
@@ -111,6 +115,22 @@ export const getUserById = (id: string) => one('SELECT * FROM users WHERE id = ?
 export const getUserBySession = (t: string) => one('SELECT * FROM users WHERE session_token = ?', [t])
 export const getUserByTelegram = (chatId: string) => one('SELECT * FROM users WHERE tg_chat_id = ?', [chatId])
 export const getUserByLinkCode = (code: string) => one('SELECT * FROM users WHERE link_code = ?', [code])
+export const getUserByRefCode = (code: string) => one('SELECT * FROM users WHERE ref_code = ?', [code])
+
+/** Replace the sign-in/link code once it has been used, so a forwarded or leaked link stops working. */
+export async function rotateLinkCode(userId: string): Promise<string> {
+  const code = randomBytes(12).toString('hex')
+  await run('UPDATE users SET link_code = ? WHERE id = ?', [code, userId])
+  return code
+}
+
+/** The user's public referral code, created on first use. */
+export async function ensureRefCode(user: User): Promise<string> {
+  if (user.refCode) return user.refCode
+  const code = randomBytes(5).toString('hex')
+  await run('UPDATE users SET ref_code = ? WHERE id = ? AND ref_code IS NULL', [code, user.id])
+  return (await getUserById(user.id))!.refCode ?? code
+}
 
 export async function listConnectedUsers(): Promise<User[]> {
   const r = await run('SELECT * FROM users WHERE connected = 1')
