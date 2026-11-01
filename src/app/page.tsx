@@ -39,83 +39,77 @@ export default function Home() {
       </header>
 
       {/* HERO */}
-      <section className="relative bg-forest pb-20 text-cream">
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pt-8 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:pt-14">
-          <div>
-            <p className="mb-5 inline-flex items-center gap-2 rounded-full border-[3px] border-ink bg-crest px-4 py-1.5 text-sm font-bold text-ink shadow-chunk-sm">
-              <span className="h-2 w-2 rounded-full bg-mandarin" /> Powered by your daily GoodDollar
-            </p>
-            <h1 className="text-[3.2rem] leading-[0.92] font-extrabold tracking-[-0.03em] sm:text-7xl lg:text-[5.6rem]">
-              Your free G$
-              <br />
-              pays your{' '}
-              <span className="mt-2 inline-block -rotate-2 rounded-2xl border-[3px] border-ink bg-mandarin px-3 pt-1 pb-3 leading-[1] text-ink shadow-chunk">
-                bills.
+      <section className="relative overflow-hidden border-b-[4px] border-ink bg-forest text-cream">
+        <div className="mx-auto max-w-7xl px-4 pt-8 pb-16 sm:px-6 lg:pt-12 lg:pb-20">
+          <p className="inline-flex items-center gap-2 rounded-full border-[3px] border-ink bg-crest px-4 py-1.5 text-sm font-extrabold text-ink uppercase shadow-chunk-sm">
+            <span className="h-2.5 w-2.5 rounded-full bg-mandarin" /> Powered by your daily GoodDollar
+          </p>
+
+          <div className="relative mt-6">
+            <h1 className="relative z-10 text-[clamp(3.6rem,13.5vw,11.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
+              <span className="block">Your free</span>
+              <span className="block">
+                <span className="text-crest">G$</span> pays
+              </span>
+              <span className="block">
+                your{' '}
+                <span className="relative mt-3 inline-block -rotate-3 rounded-[0.18em] border-[5px] border-ink bg-mandarin px-[0.12em] pt-[0.04em] pb-[0.1em] text-ink shadow-[10px_10px_0_0_#0b1f16]">
+                  bills.
+                </span>
               </span>
             </h1>
-            <p className="mt-7 max-w-xl text-lg leading-relaxed text-cream/85 sm:text-xl">
-              Jarra is a helper in your chat. Every day it collects your free GoodDollar, saves it in jars — <b className="text-crest">Light, Data, Airtime</b> — and pays them for you. Just talk to it like a friend.
-            </p>
-            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <a
-                href={tg ?? '/app'}
-                className="press inline-flex items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-mandarin px-7 py-4 text-lg font-extrabold text-ink shadow-chunk"
-              >
-                Start on Telegram →
-              </a>
-              <Link
-                href="/app"
-                className="press inline-flex items-center justify-center rounded-2xl border-[3px] border-ink bg-cream px-7 py-4 text-lg font-extrabold text-ink shadow-chunk"
-              >
-                Try it in the browser
-              </Link>
-            </div>
-            <p className="mt-5 text-sm font-semibold text-cream/60">No crypto talk. No gas. No new app to learn.</p>
-          </div>
 
-          {/* jars + chat bubble */}
-          <div className="relative mx-auto w-full max-w-md">
-            <div className="absolute -inset-6 -z-0 rounded-[2.5rem] bg-forest-soft" />
-            <div className="relative grid grid-cols-3 items-end gap-2 px-2 pt-10 pb-4">
+            {/* jars, tucked beside the headline on large screens */}
+            <div className="pointer-events-none absolute top-[30%] right-0 hidden w-[32%] grid-cols-3 items-end gap-3 lg:grid">
               <div className="animate-bob" style={{ animationDelay: '0s' }}>
-                <Jar pct={72} color="crest" lid="#ff6b00" className="h-48 sm:h-56">
+                <Jar pct={72} color="crest" lid="#ff6b00" className="h-52">
                   <span className="text-3xl">💡</span>
                 </Jar>
-                <p className="mt-2 text-center font-extrabold">Light</p>
               </div>
               <div className="animate-bob" style={{ animationDelay: '0.4s' }}>
-                <Jar pct={45} color="mandarin" className="h-56 sm:h-64">
+                <Jar pct={45} color="mandarin" className="h-64">
                   <span className="text-3xl">📶</span>
                 </Jar>
-                <p className="mt-2 text-center font-extrabold">Data</p>
               </div>
               <div className="animate-bob" style={{ animationDelay: '0.8s' }}>
-                <Jar pct={90} color="crest" lid="#ff6b00" className="h-44 sm:h-52">
+                <Jar pct={90} color="crest" lid="#ff6b00" className="h-48">
                   <span className="text-3xl">📞</span>
                 </Jar>
-                <p className="mt-2 text-center font-extrabold">Airtime</p>
               </div>
             </div>
-            <div className="relative -mt-2 ml-auto w-[85%] rotate-2 rounded-3xl rounded-br-md border-[3px] border-ink bg-cream p-4 text-ink shadow-chunk-lg">
-              <p className="text-sm font-bold text-forest">Jarra</p>
-              <p className="text-base font-semibold leading-snug">Light jar don full 🎉 I&apos;ve paid ₦3,000 for your meter. Token: 4021 7781 0093 2215 6650</p>
+          </div>
+
+          <div className="mt-12 grid items-end gap-10 lg:mt-16 lg:grid-cols-[1fr_auto]">
+            <div>
+              <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
+                A helper in your chat that collects your free GoodDollar every day, saves it in jars —{' '}
+                <span className="text-crest">Light, Data, Airtime</span> — and pays them for you.
+              </p>
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+                <a
+                  href={tg ?? '/app'}
+                  className="press inline-flex items-center justify-center gap-2 rounded-2xl border-[4px] border-ink bg-mandarin px-8 py-5 text-xl font-extrabold text-ink uppercase shadow-chunk-lg"
+                >
+                  Start on Telegram →
+                </a>
+                <Link
+                  href="/app"
+                  className="press inline-flex items-center justify-center rounded-2xl border-[4px] border-ink bg-cream px-8 py-5 text-xl font-extrabold text-ink uppercase shadow-chunk-lg"
+                >
+                  Try it now
+                </Link>
+              </div>
+              <p className="mt-5 text-sm font-bold tracking-wide text-cream/60 uppercase">No crypto talk · No gas · No new app</p>
+            </div>
+
+            <div className="relative w-full max-w-sm rotate-2 rounded-3xl rounded-br-md border-[4px] border-ink bg-cream p-5 text-ink shadow-chunk-lg lg:mb-2">
+              <p className="text-sm font-extrabold text-forest uppercase">Jarra · 7:02am</p>
+              <p className="mt-1 text-lg leading-snug font-bold">Light jar don full 🎉 I&apos;ve paid ₦3,000 for your meter.</p>
+              <p className="mt-2 rounded-xl bg-crest px-3 py-1.5 font-mono text-sm font-bold">4021 7781 0093 2215 6650</p>
             </div>
           </div>
         </div>
       </section>
-
-      {/* MARQUEE */}
-      <div className="-mt-6 -rotate-1 border-y-[3px] border-ink bg-crest py-3">
-        <div className="flex w-max animate-marquee gap-10 text-xl font-extrabold whitespace-nowrap text-ink">
-          {Array.from({ length: 2 }).map((_, k) => (
-            <div key={k} className="flex gap-10">
-              {['💡 Light paid', '📶 Data sent', '📞 Airtime topped up', '☀️ G$ claimed daily', '🔥 Streak bonus', '🗣️ Speaks Pidgin', '🫙 Jars that fill themselves'].map((t) => (
-                <span key={t}>{t} ✦</span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* HOW */}
       <section className="grain bg-cream py-20">
