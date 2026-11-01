@@ -42,11 +42,15 @@ export default function Home() {
       <section className="relative overflow-hidden border-b-[4px] border-ink bg-forest text-cream">
         <div className="mx-auto max-w-7xl px-4 pt-8 pb-16 sm:px-6 lg:pt-12 lg:pb-20">
           <p className="inline-flex items-center gap-2 rounded-full border-[3px] border-ink bg-crest px-4 py-1.5 text-sm font-extrabold text-ink uppercase shadow-chunk-sm">
-            <span className="h-2.5 w-2.5 rounded-full bg-mandarin" /> 🤖 Your AI bill agent · Powered by GoodDollar
+            <span className="h-2.5 w-2.5 rounded-full bg-mandarin" /> Powered by GoodDollar · Built on Celo
           </p>
 
           <div className="relative mt-6">
             <h1 className="relative z-10 text-[clamp(3.6rem,13.5vw,11.5rem)] leading-[0.82] font-extrabold tracking-[-0.055em] uppercase">
+              <span className="mb-[0.18em] flex items-center gap-[0.25em] text-[0.36em] leading-none tracking-[-0.03em] text-crest">
+                Meet your AI agent
+                <span className="inline-block h-[0.14em] w-[1.6em] rounded-full bg-mandarin" />
+              </span>
               <span className="block">Your free</span>
               <span className="block">
                 <span className="text-crest">G$</span> pays
@@ -60,7 +64,7 @@ export default function Home() {
             </h1>
 
             {/* jars, tucked beside the headline on large screens */}
-            <div className="pointer-events-none absolute top-[30%] right-0 hidden w-[32%] grid-cols-3 items-end gap-3 lg:grid">
+            <div className="pointer-events-none absolute top-[38%] right-0 hidden w-[32%] grid-cols-3 items-end gap-3 lg:grid">
               <div className="animate-bob" style={{ animationDelay: '0s' }}>
                 <Jar pct={72} color="crest" lid="#ff6b00" className="h-52">
                   <span className="text-3xl">💡</span>

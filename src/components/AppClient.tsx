@@ -109,7 +109,7 @@ export function AppClient({ tgCode }: { tgCode?: string }) {
       {state && state.user.connected && <Dashboard state={state} setState={setState} flash={flash} />}
       {toast && (
         <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-          <p className="animate-pop rounded-2xl border-[3px] border-ink bg-ink px-5 py-3 font-bold text-cream shadow-chunk">{toast}</p>
+          <p className="animate-pop max-w-md rounded-full bg-ink px-5 py-3 text-center font-bold text-cream shadow-[0_10px_30px_rgba(11,31,22,0.35)]">{toast}</p>
         </div>
       )}
     </div>
@@ -124,12 +124,10 @@ function TopBar({ state }: { state: State | null }) {
           <span className="grid h-9 w-9 place-items-center rounded-xl border-[3px] border-ink bg-crest text-lg shadow-chunk-sm">🫙</span>
           <span className="text-xl font-extrabold">Jarra</span>
         </Link>
-        <div className="flex items-center gap-2">
-          {state?.config.chainMode === 'mock' && (
-            <span className="rounded-full border-2 border-ink bg-crest px-3 py-0.5 text-xs font-extrabold text-ink">DEMO MODE</span>
-          )}
-          {state?.user.connected && (
-            <span className="rounded-full border-2 border-ink bg-mandarin px-3 py-0.5 text-sm font-extrabold text-ink">🔥 {state.user.streak}</span>
+        <div className="flex items-center gap-3">
+          {state?.config.chainMode === 'mock' && <span className="text-xs font-bold tracking-widest text-cream/50 uppercase">Demo</span>}
+          {state?.user.name && (
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-crest text-sm font-extrabold text-ink">{state.user.name.slice(0, 1).toUpperCase()}</span>
           )}
         </div>
       </div>
@@ -357,13 +355,19 @@ function Step({ n, title, done, active, children }: { n: number; title: string; 
 
 // ---------- dashboard ----------
 
+function greeting() {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+}
+
 function Dashboard({ state, setState, flash }: { state: State; setState: (s: State) => void; flash: (t: string) => void }) {
-  const [tab, setTab] = useState<'jars' | 'chat' | 'activity'>('jars')
+  const [tab, setTab] = useState<'home' | 'chat'>('home')
   const [editing, setEditing] = useState<JarView | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const { snapshot: snap, user } = state
   const mock = state.config.chainMode === 'mock'
   const totalNgn = Math.floor(snap.totalGd * snap.ngnPerGd)
+  const claimedToday = state.activity.some((a) => a.type === 'claim' && new Date(a.createdAt).toDateString() === new Date().toDateString())
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label)
@@ -384,91 +388,103 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
     })
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pt-6 pb-28 sm:px-6 lg:pb-10">
-      {/* summary */}
-      <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="relative overflow-hidden rounded-3xl border-[3px] border-ink bg-forest p-6 text-cream shadow-chunk-lg">
-          <p className="font-bold text-cream/70">{user.name ? `${user.name}'s jars` : 'Your jars'}</p>
-          <p className="mt-1 text-5xl font-extrabold tracking-tight sm:text-6xl">{formatNgn(totalNgn)}</p>
-          <p className="mt-1 font-semibold text-crest">G$ {gdFmt(snap.totalGd)} saved for bills</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button onClick={claim} disabled={!!busy} className="press rounded-2xl border-[3px] border-ink bg-mandarin px-5 py-3 font-extrabold text-ink shadow-chunk-sm disabled:opacity-60">
-              {busy === 'claim' ? 'Claiming…' : '☀️ Claim today'}
-            </button>
-            <button onClick={() => setTab('chat')} className="press rounded-2xl border-[3px] border-ink bg-cream px-5 py-3 font-extrabold text-ink shadow-chunk-sm lg:hidden">
-              💬 Ask Jarra
-            </button>
-          </div>
-          <div className="pointer-events-none absolute -right-6 -bottom-10 hidden h-48 w-40 rotate-12 opacity-90 sm:block">
-            <Jar pct={snap.jars.reduce((s, j) => s + j.pct, 0) / 3} color="crest" lid="#ff6b00" className="h-full" />
-          </div>
-        </div>
-        <TelegramCard state={state} />
-      </section>
-
-      {mock && (
-        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border-[3px] border-dashed border-ink bg-crest-soft px-4 py-3 text-sm font-bold">
-          <span className="mr-1">🧪 Demo tools:</span>
-          <button
-            onClick={() => run('dep', async () => setState(await api<State>('/api/demo/deposit', { gd: 5000 })))}
-            className="press rounded-xl border-2 border-ink bg-white px-3 py-1 shadow-chunk-sm"
-          >
-            + G$ 5,000
-          </button>
-          <button
-            onClick={() =>
-              run('day', async () => {
-                await api<State>('/api/demo/deposit', { action: 'next-day' })
-                const r = await api<{ message: string; state: State }>('/api/claim', {})
-                setState(r.state)
-                flash(r.message.split('\n')[0])
-              })
-            }
-            className="press rounded-xl border-2 border-ink bg-white px-3 py-1 shadow-chunk-sm"
-          >
-            ⏭ Next day
-          </button>
-          <span className="text-ink/60">1 G$ = ₦{snap.ngnPerGd.toFixed(3)}</span>
-        </div>
-      )}
-
-      {/* mobile tabs */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 gap-2 border-t-[3px] border-ink bg-cream p-3 lg:hidden">
-        {(['jars', 'chat', 'activity'] as const).map((t) => (
+    <main className="mx-auto max-w-6xl px-4 pt-5 pb-28 sm:px-6 lg:pt-8 lg:pb-12">
+      {/* mobile switch */}
+      <div className="mb-4 grid grid-cols-2 rounded-full bg-forest/10 p-1 lg:hidden">
+        {(['home', 'chat'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-xl border-[3px] border-ink py-2.5 font-extrabold capitalize ${tab === t ? 'bg-mandarin shadow-chunk-sm' : 'bg-white'}`}
+            className={`rounded-full py-2.5 text-sm font-extrabold transition ${tab === t ? 'bg-forest text-cream shadow' : 'text-forest'}`}
           >
-            {t === 'jars' ? '🫙 Jars' : t === 'chat' ? '💬 Chat' : '📜 Activity'}
+            {t === 'home' ? 'My jars' : 'Talk to Jarra'}
           </button>
         ))}
-      </nav>
+      </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <div className={`grid content-start gap-6 ${tab === 'chat' ? 'hidden lg:grid' : ''}`}>
-          <section className={tab === 'activity' ? 'hidden lg:block' : ''}>
-            <h2 className="mb-3 text-2xl font-extrabold">Bill jars</h2>
-            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr] lg:items-start">
+        {/* LEFT: shelf + activity */}
+        <div className={`grid gap-6 ${tab === 'chat' ? 'hidden lg:grid' : ''}`}>
+          <section className="overflow-hidden rounded-[2rem] border-[4px] border-ink bg-forest text-cream shadow-chunk-lg">
+            <div className="flex items-start justify-between gap-4 p-6 pb-2 sm:p-8 sm:pb-2">
+              <div>
+                <p className="font-semibold text-cream/60">
+                  {greeting()}
+                  {user.name ? `, ${user.name}` : ''}
+                </p>
+                <p className="mt-1 text-6xl leading-none font-extrabold tracking-[-0.04em] sm:text-7xl">{formatNgn(totalNgn)}</p>
+                <p className="mt-2 font-semibold text-crest">G$ {gdFmt(snap.totalGd)} saved for your bills</p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className="rounded-full bg-cream/10 px-3 py-1 text-sm font-bold whitespace-nowrap">🔥 {user.streak}-day streak</span>
+              </div>
+            </div>
+
+            {/* shelf */}
+            <div className="relative mt-4 px-4 sm:px-8">
+              <div className="grid grid-cols-3 items-end gap-3 sm:gap-6">
+                {snap.jars.map((j) => (
+                  <button key={j.kind} onClick={() => setEditing(j)} className="group flex flex-col items-center text-center">
+                    <Jar
+                      pct={j.pct}
+                      color={JAR_COLOR[j.kind]}
+                      lid={j.kind === 'airtime' ? '#ff6b00' : '#ffc72c'}
+                      className="h-32 transition group-hover:-translate-y-1.5 sm:h-40"
+                    >
+                      <span className="text-2xl sm:text-3xl">{j.emoji}</span>
+                    </Jar>
+                  </button>
+                ))}
+              </div>
+              <div className="h-4 rounded-t-md border-x-[4px] border-t-[4px] border-ink bg-crest" />
+            </div>
+            <div className="grid grid-cols-3 gap-3 border-t-[4px] border-ink bg-forest-deep px-4 py-4 sm:gap-6 sm:px-8">
               {snap.jars.map((j) => (
-                <JarCard key={j.kind} jar={j} onEdit={() => setEditing(j)} />
+                <button key={j.kind} onClick={() => setEditing(j)} className="text-left">
+                  <div className="flex items-baseline justify-between gap-1">
+                    <p className="font-extrabold">{j.label}</p>
+                    {j.autoPay && <span className="text-[10px] font-extrabold tracking-wider text-crest uppercase">Auto</span>}
+                  </div>
+                  <p className="mt-0.5 text-sm font-semibold text-cream/60">
+                    {formatNgn(j.balanceNgn)} <span className="hidden sm:inline">of {formatNgn(j.targetNgn)}</span>
+                  </p>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-cream/15">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${j.kind === 'data' ? 'bg-mandarin' : 'bg-crest'}`}
+                      style={{ width: `${Math.max(j.pct, 3)}%` }}
+                    />
+                  </div>
+                </button>
               ))}
             </div>
-            {snap.freeGd > 0.5 && (
-              <p className="mt-3 text-sm font-bold text-ink/60">
-                + G$ {gdFmt(snap.freeGd)} ({formatNgn(snap.freeNgn)}) free — all jars are at target.
-              </p>
-            )}
+            <div className="flex flex-wrap items-center gap-3 bg-forest-deep px-4 pb-6 sm:px-8">
+              <button
+                onClick={claim}
+                disabled={!!busy || claimedToday}
+                className="press flex-1 rounded-2xl border-[3px] border-ink bg-mandarin px-5 py-3.5 font-extrabold text-ink shadow-chunk-sm disabled:cursor-default disabled:border-cream/20 disabled:bg-cream/10 disabled:text-cream/60 disabled:shadow-none sm:flex-none"
+              >
+                {busy === 'claim' ? 'Claiming…' : claimedToday ? '✓ Claimed today' : 'Claim today’s G$'}
+              </button>
+              <p className="text-sm font-semibold text-cream/50">Tap a jar to set it up</p>
+            </div>
           </section>
-          <section className={tab === 'jars' ? 'hidden lg:block' : ''}>
-            <h2 className="mb-3 text-2xl font-extrabold">What Jarra did</h2>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xl font-extrabold">Activity</h2>
+              <TelegramChip state={state} />
+            </div>
             <ActivityList items={state.activity} chainMode={state.config.chainMode} />
           </section>
         </div>
+
+        {/* RIGHT: chat */}
         <div className={tab === 'chat' ? '' : 'hidden lg:block'}>
           <Chat state={state} setState={setState} flash={flash} />
         </div>
       </div>
+
+      {mock && <DemoControls run={run} setState={setState} flash={flash} rate={snap.ngnPerGd} />}
 
       {editing && (
         <JarSheet
@@ -489,26 +505,57 @@ function Dashboard({ state, setState, flash }: { state: State; setState: (s: Sta
   )
 }
 
-function JarCard({ jar, onEdit }: { jar: JarView; onEdit: () => void }) {
-  const bg = jar.kind === 'light' ? 'bg-white' : jar.kind === 'data' ? 'bg-crest-soft' : 'bg-white'
-  const setUp = jar.kind === 'light' ? Boolean(jar.details.meterNumber) : Boolean(jar.details.phone)
+function DemoControls({
+  run,
+  setState,
+  flash,
+  rate,
+}: {
+  run: (label: string, fn: () => Promise<void>) => Promise<void>
+  setState: (s: State) => void
+  flash: (t: string) => void
+  rate: number
+}) {
+  const [open, setOpen] = useState(false)
   return (
-    <button onClick={onEdit} className={`press group min-w-0 rounded-3xl border-[3px] border-ink p-3 text-left shadow-chunk sm:p-4 ${bg}`}>
-      <div className="flex flex-wrap items-center justify-between gap-1">
-        <p className="text-base font-extrabold sm:text-lg">
-          {jar.emoji} {jar.label}
-        </p>
-        {jar.autoPay && <span className="rounded-full border-2 border-ink bg-forest px-1.5 py-0.5 text-[10px] font-extrabold text-cream">AUTO</span>}
-      </div>
-      <div className="my-2 flex justify-center">
-        <Jar pct={jar.pct} color={JAR_COLOR[jar.kind]} lid={jar.kind === 'airtime' ? '#ff6b00' : '#ffc72c'} className="h-28 sm:h-32">
-          <span className="rounded-lg border-2 border-ink bg-cream px-2 text-lg font-extrabold">{jar.pct}%</span>
-        </Jar>
-      </div>
-      <p className="text-base leading-tight font-extrabold sm:text-lg">{formatNgn(jar.balanceNgn)}</p>
-      <p className="text-xs font-bold text-ink/50">of {formatNgn(jar.targetNgn)}</p>
-      <p className="mt-1 truncate text-xs font-bold text-ink/60">{setUp ? (jar.kind === 'light' ? `Meter ${jar.details.meterNumber}` : jar.details.phone) : 'Tap to set up →'}</p>
-    </button>
+    <div className="fixed right-4 bottom-20 z-40 lg:bottom-6">
+      {open ? (
+        <div className="animate-pop w-60 rounded-2xl bg-ink p-3 text-cream shadow-[0_12px_32px_rgba(11,31,22,0.4)]">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-bold tracking-widest text-cream/50 uppercase">Demo controls</p>
+            <button onClick={() => setOpen(false)} className="text-cream/50 hover:text-cream" aria-label="Close demo controls">
+              ✕
+            </button>
+          </div>
+          <div className="grid gap-2">
+            <button
+              onClick={() => run('dep', async () => setState(await api<State>('/api/demo/deposit', { gd: 5000 })))}
+              className="rounded-xl bg-cream/10 px-3 py-2 text-left text-sm font-bold hover:bg-cream/20"
+            >
+              Deposit G$ 5,000
+            </button>
+            <button
+              onClick={() =>
+                run('day', async () => {
+                  await api<State>('/api/demo/deposit', { action: 'next-day' })
+                  const r = await api<{ message: string; state: State }>('/api/claim', {})
+                  setState(r.state)
+                  flash(r.message.split('\n')[0])
+                })
+              }
+              className="rounded-xl bg-cream/10 px-3 py-2 text-left text-sm font-bold hover:bg-cream/20"
+            >
+              Skip to tomorrow
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] font-semibold text-cream/40">Simulated G$ · 1 G$ = ₦{rate.toFixed(3)}</p>
+        </div>
+      ) : (
+        <button onClick={() => setOpen(true)} className="rounded-full bg-ink px-4 py-2 text-xs font-bold tracking-widest text-cream/80 uppercase shadow-lg hover:text-cream">
+          Demo
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -521,158 +568,177 @@ function JarSheet({ jar, onClose, onSave }: { jar: JarView; onClose: () => void;
   const [meter, setMeter] = useState(jar.details.meterNumber ?? '')
   const [saving, setSaving] = useState(false)
   const presets = jar.kind === 'light' ? [2000, 3000, 5000, 10000] : jar.kind === 'data' ? [500, 1000, 1500, 3000] : [200, 500, 1000, 2000]
+  const field = 'w-full rounded-xl border-2 border-ink/15 bg-white px-4 py-3 font-semibold outline-none focus:border-ink'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-0 sm:items-center sm:p-4" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="animate-pop max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border-[3px] border-ink bg-cream p-6 shadow-chunk-lg sm:rounded-3xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-3xl font-extrabold">
-            {jar.emoji} {jar.label} jar
-          </h3>
-          <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border-[3px] border-ink bg-white font-extrabold">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="animate-pop max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[2rem] bg-cream sm:rounded-[2rem] sm:border-[4px] sm:border-ink sm:shadow-chunk-lg">
+        <div className="flex items-center gap-4 bg-forest px-6 py-5 text-cream">
+          <Jar pct={jar.pct} color={JAR_COLOR[jar.kind]} lid={jar.kind === 'airtime' ? '#ff6b00' : '#ffc72c'} className="h-16 w-12" />
+          <div className="flex-1">
+            <h3 className="text-2xl font-extrabold">{jar.label} jar</h3>
+            <p className="text-sm font-semibold text-cream/60">
+              {formatNgn(jar.balanceNgn)} saved · {jar.pct}%
+            </p>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-cream/10 font-bold hover:bg-cream/20" aria-label="Close">
             ✕
           </button>
         </div>
 
-        <p className="mb-2 font-extrabold">Save up to</p>
-        <div className="grid grid-cols-4 gap-2">
-          {presets.map((p) => (
-            <button key={p} onClick={() => setTarget(p)} className={`rounded-xl border-[3px] border-ink py-2 font-extrabold ${target === p ? 'bg-mandarin shadow-chunk-sm' : 'bg-white'}`}>
-              {p >= 1000 ? `₦${p / 1000}k` : `₦${p}`}
-            </button>
-          ))}
-        </div>
+        <div className="grid gap-5 p-6">
+          <div>
+            <p className="mb-2 text-sm font-extrabold tracking-wide text-ink/60 uppercase">Save up to</p>
+            <div className="grid grid-cols-4 gap-2">
+              {presets.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setTarget(p)}
+                  className={`rounded-xl py-2.5 font-extrabold transition ${target === p ? 'bg-ink text-cream' : 'bg-white text-ink ring-2 ring-ink/10 hover:ring-ink/30'}`}
+                >
+                  {p >= 1000 ? `₦${p / 1000}k` : `₦${p}`}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        {jar.kind === 'light' ? (
-          <div className="mt-5 grid gap-3">
-            <label className="grid gap-1">
-              <span className="font-extrabold">Electricity company</span>
-              <select value={disco} onChange={(e) => setDisco(e.target.value)} className="rounded-xl border-[3px] border-ink bg-white px-3 py-3 font-semibold">
+          {jar.kind === 'light' ? (
+            <div className="grid gap-3">
+              <p className="text-sm font-extrabold tracking-wide text-ink/60 uppercase">Your meter</p>
+              <select value={disco} onChange={(e) => setDisco(e.target.value)} className={field}>
                 {DISCOS.map((d) => (
                   <option key={d} value={d}>
                     {DISCO_INFO[d].short} — {DISCO_INFO[d].region}
                   </option>
                 ))}
               </select>
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {['prepaid', 'postpaid'].map((t) => (
-                <button key={t} onClick={() => setMeterType(t)} className={`rounded-xl border-[3px] border-ink py-2 font-extrabold capitalize ${meterType === t ? 'bg-crest shadow-chunk-sm' : 'bg-white'}`}>
-                  {t}
-                </button>
-              ))}
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-white p-1 ring-2 ring-ink/10">
+                {['prepaid', 'postpaid'].map((t) => (
+                  <button key={t} onClick={() => setMeterType(t)} className={`rounded-lg py-2 font-bold capitalize ${meterType === t ? 'bg-crest' : ''}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <input value={meter} onChange={(e) => setMeter(e.target.value)} inputMode="numeric" placeholder="Meter number" className={field} />
+              {jar.details.customerName && <p className="text-sm font-bold text-forest">✓ {jar.details.customerName}</p>}
             </div>
-            <label className="grid gap-1">
-              <span className="font-extrabold">Meter number</span>
-              <input value={meter} onChange={(e) => setMeter(e.target.value)} inputMode="numeric" placeholder="e.g. 4502 1234 567" className="rounded-xl border-[3px] border-ink bg-white px-3 py-3 font-semibold" />
-            </label>
-            {jar.details.customerName && <p className="text-sm font-bold text-forest">✓ {jar.details.customerName}</p>}
-          </div>
-        ) : (
-          <label className="mt-5 grid gap-1">
-            <span className="font-extrabold">Phone number</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="0803 123 4567" className="rounded-xl border-[3px] border-ink bg-white px-3 py-3 font-semibold" />
-          </label>
-        )}
+          ) : (
+            <div className="grid gap-2">
+              <p className="text-sm font-extrabold tracking-wide text-ink/60 uppercase">Phone number</p>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="0803 123 4567" className={field} />
+            </div>
+          )}
 
-        <button onClick={() => setAutoPay(!autoPay)} className="mt-5 flex w-full items-center justify-between rounded-2xl border-[3px] border-ink bg-white px-4 py-3 text-left">
-          <span>
-            <span className="block font-extrabold">Pay automatically</span>
-            <span className="text-sm font-semibold text-ink/60">When the jar reaches {formatNgn(target)}</span>
-          </span>
-          <span className={`relative h-8 w-14 rounded-full border-[3px] border-ink transition ${autoPay ? 'bg-forest' : 'bg-cream'}`}>
-            <span className={`absolute top-0.5 h-5 w-5 rounded-full border-2 border-ink bg-crest transition-all ${autoPay ? 'left-7' : 'left-0.5'}`} />
-          </span>
-        </button>
+          <button onClick={() => setAutoPay(!autoPay)} className="flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left ring-2 ring-ink/10">
+            <span>
+              <span className="block font-extrabold">Pay automatically</span>
+              <span className="text-sm font-semibold text-ink/55">When the jar reaches {formatNgn(target)}</span>
+            </span>
+            <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${autoPay ? 'bg-forest' : 'bg-ink/15'}`}>
+              <span className={`absolute top-1 h-5 w-5 rounded-full bg-cream shadow transition-all ${autoPay ? 'left-6' : 'left-1'}`} />
+            </span>
+          </button>
 
-        <button
-          disabled={saving}
-          onClick={async () => {
-            setSaving(true)
-            await onSave(
-              jar.kind === 'light'
-                ? { targetNgn: target, autoPay, disco, meterType, meterNumber: meter || undefined }
-                : { targetNgn: target, autoPay, phone: phone || undefined },
-            )
-            setSaving(false)
-          }}
-          className="press mt-6 w-full rounded-2xl border-[3px] border-ink bg-mandarin py-4 text-lg font-extrabold shadow-chunk disabled:opacity-60"
-        >
-          {saving ? (jar.kind === 'light' && meter ? 'Checking meter…' : 'Saving…') : 'Save jar'}
-        </button>
+          <button
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true)
+              await onSave(
+                jar.kind === 'light'
+                  ? { targetNgn: target, autoPay, disco, meterType, meterNumber: meter || undefined }
+                  : { targetNgn: target, autoPay, phone: phone || undefined },
+              )
+              setSaving(false)
+            }}
+            className="press w-full rounded-2xl border-[3px] border-ink bg-mandarin py-4 text-lg font-extrabold shadow-chunk disabled:opacity-60"
+          >
+            {saving ? (jar.kind === 'light' && meter ? 'Checking meter…' : 'Saving…') : 'Save jar'}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
+const ACT_STYLE: Record<string, { icon: string; tint: string; sign: '+' | '−' | '' }> = {
+  claim: { icon: '☀️', tint: 'bg-crest', sign: '+' },
+  deposit: { icon: '＋', tint: 'bg-crest-soft', sign: '+' },
+  reward: { icon: '🔥', tint: 'bg-mandarin', sign: '+' },
+  refund: { icon: '↩', tint: 'bg-crest-soft', sign: '+' },
+  pay: { icon: '✓', tint: 'bg-forest text-cream', sign: '−' },
+  move: { icon: '→', tint: 'bg-cream', sign: '' },
+}
+
 function ActivityList({ items, chainMode }: { items: Activity[]; chainMode: string }) {
-  if (!items.length) return <p className="rounded-3xl border-[3px] border-dashed border-ink/40 p-6 text-center font-bold text-ink/50">Nothing yet — tap “Claim today”.</p>
-  const icon: Record<string, string> = { claim: '☀️', pay: '✅', refund: '↩️', reward: '🔥', deposit: '➕', move: '🫙' }
+  if (!items.length) return <p className="rounded-2xl bg-white p-6 text-center font-semibold text-ink/50 ring-2 ring-ink/10">Nothing yet. Claim today’s G$ to start.</p>
   return (
-    <ul className="divide-y-[3px] divide-ink overflow-hidden rounded-3xl border-[3px] border-ink bg-white shadow-chunk">
-      {items.map((a) => (
-        <li key={a.id} className="flex items-start gap-3 px-4 py-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border-2 border-ink bg-crest-soft text-lg">{a.status === 'failed' ? '⚠️' : (icon[a.type] ?? '•')}</span>
-          <div className="min-w-0 flex-1">
-            <p className="font-extrabold leading-tight">{a.title}</p>
-            {a.detail && <p className="mt-0.5 text-sm font-semibold break-words text-ink/60">{a.detail}</p>}
-            <p className="mt-0.5 text-xs font-bold text-ink/40">
-              {new Date(a.createdAt).toLocaleString('en-NG', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
-              {a.status === 'pending' && ' · processing'}
-              {a.txHash && chainMode === 'celo' && (
-                <>
-                  {' · '}
-                  <a href={`https://celoscan.io/tx/${a.txHash}`} target="_blank" rel="noreferrer" className="underline">
-                    receipt
-                  </a>
-                </>
-              )}
-            </p>
-          </div>
-        </li>
-      ))}
+    <ul className="overflow-hidden rounded-2xl bg-white ring-2 ring-ink/10">
+      {items.slice(0, 8).map((a, i) => {
+        const st = ACT_STYLE[a.type] ?? ACT_STYLE.move
+        const gd = a.amountWei ? Number(BigInt(a.amountWei) / 10n ** 18n) : null
+        return (
+          <li key={a.id} className={`flex items-center gap-3 px-4 py-3 ${i ? 'border-t border-ink/10' : ''}`}>
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-base font-extrabold ${a.status === 'failed' ? 'bg-red-100' : st.tint}`}>
+              {a.status === 'failed' ? '!' : st.icon}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-bold">{a.title}</p>
+              <p className="truncate text-sm font-medium text-ink/50">
+                {a.detail ?? new Date(a.createdAt).toLocaleString('en-NG', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                {a.status === 'pending' && ' · processing'}
+                {a.txHash && chainMode === 'celo' && (
+                  <>
+                    {' · '}
+                    <a href={`https://celoscan.io/tx/${a.txHash}`} target="_blank" rel="noreferrer" className="underline">
+                      receipt
+                    </a>
+                  </>
+                )}
+              </p>
+            </div>
+            {gd !== null && st.sign && (
+              <span className={`shrink-0 font-extrabold tabular-nums ${st.sign === '+' ? 'text-forest' : 'text-ink'}`}>
+                {st.sign}G$ {gd.toLocaleString()}
+              </span>
+            )}
+          </li>
+        )
+      })}
     </ul>
   )
 }
 
-function TelegramCard({ state }: { state: State }) {
+function TelegramChip({ state }: { state: State }) {
   const { telegramLinked, telegramLink } = state.user
+  if (telegramLinked) return <span className="text-sm font-bold text-forest">✓ On Telegram</span>
+  if (!telegramLink) return null
   return (
-    <div className="flex flex-col justify-between rounded-3xl border-[3px] border-ink bg-crest p-6 shadow-chunk-lg">
-      <div>
-        <p className="text-2xl font-extrabold leading-tight">{telegramLinked ? 'Jarra is in your Telegram ✓' : 'Get Jarra in your chat'}</p>
-        <p className="mt-2 font-semibold text-ink/75">
-          {telegramLinked ? 'You’ll get a morning message after every claim. Reply any time to pay a bill.' : 'Morning updates + pay bills by just texting. Like a friend who handles it.'}
-        </p>
-      </div>
-      {!telegramLinked &&
-        (telegramLink ? (
-          <a href={telegramLink} target="_blank" rel="noreferrer" className="press mt-5 rounded-2xl border-[3px] border-ink bg-forest px-5 py-3 text-center font-extrabold text-cream shadow-chunk-sm">
-            Open in Telegram →
-          </a>
-        ) : (
-          <p className="mt-5 rounded-2xl border-[3px] border-dashed border-ink px-4 py-3 text-sm font-bold">Telegram bot not configured yet — use the chat here.</p>
-        ))}
-    </div>
+    <a href={telegramLink} target="_blank" rel="noreferrer" className="rounded-full bg-forest px-3 py-1.5 text-sm font-bold text-cream hover:bg-forest-soft">
+      Get morning updates on Telegram →
+    </a>
   )
 }
 
 // ---------- chat ----------
 
-const CHIPS = ['How much is in my jars?', '₦200 airtime for me', '1GB data for me', 'Buy ₦3000 light']
+const CHIPS = ['What’s in my jars?', '₦200 airtime for me', '1GB data', 'Buy ₦3000 light']
 
 function Chat({ state, setState, flash }: { state: State; setState: (s: State) => void; flash: (t: string) => void }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [confirm, setConfirm] = useState<{ summary: string; gd: number } | null>(state.user.hasPending ? { summary: 'your last request', gd: 0 } : null)
+  const [confirm, setConfirm] = useState<{ summary: string; gd: number } | null>(state.user.hasPending ? { summary: 'Your last request', gd: 0 } : null)
   const [optimistic, setOptimistic] = useState<string | null>(null)
-  const endRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [state.messages.length, optimistic, sending])
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [state.messages.length, optimistic, sending, confirm])
 
   const send = async (body: { text?: string; confirm?: boolean }) => {
     setSending(true)
     if (body.text) setOptimistic(body.text)
+    if (body.confirm !== undefined) setConfirm(null)
     try {
       const r = await api<{ reply: { text: string; confirm?: { summary: string; gd: number } }; state: State }>('/api/chat', body)
       setState(r.state)
@@ -685,71 +751,96 @@ function Chat({ state, setState, flash }: { state: State; setState: (s: State) =
     }
   }
 
+  const status = state.config.llm === 'antseed' ? 'AI agent · on AntSeed' : state.config.llm === 'rules' ? 'AI agent · quick mode' : 'AI agent · online'
+
   return (
-    <section className="flex h-[calc(100dvh-13rem)] flex-col overflow-hidden rounded-3xl border-[3px] border-ink bg-white shadow-chunk-lg lg:sticky lg:top-6 lg:h-[640px]">
-      <div className="flex items-center gap-3 border-b-[3px] border-ink bg-forest px-4 py-3 text-cream">
-        <span className="grid h-10 w-10 place-items-center rounded-full border-[3px] border-ink bg-crest text-lg">🫙</span>
+    <section className="flex h-[calc(100dvh-10.5rem)] flex-col overflow-hidden rounded-[2rem] border-[4px] border-ink bg-white shadow-chunk-lg lg:sticky lg:top-6 lg:h-[680px]">
+      <div className="flex items-center gap-3 bg-forest px-5 py-4 text-cream">
+        <div className="relative">
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-crest text-xl">🫙</span>
+          <span className="absolute right-0 bottom-0 h-3 w-3 rounded-full border-2 border-forest bg-mandarin" />
+        </div>
         <div>
-          <p className="font-extrabold leading-none">Jarra</p>
-          <p className="mt-1 text-xs font-bold text-cream/60">{state.config.llm === 'antseed' ? 'thinking on AntSeed' : state.config.llm === 'rules' ? 'quick mode' : 'online'}</p>
+          <p className="text-lg leading-none font-extrabold">Jarra</p>
+          <p className="mt-1 text-xs font-semibold text-cream/60">{status}</p>
         </div>
       </div>
-      <div className="grain flex-1 space-y-3 overflow-y-auto p-4">
+
+      <div ref={scrollRef} className="flex-1 space-y-2.5 overflow-y-auto bg-cream/60 px-4 py-5">
         {state.messages.length === 0 && !optimistic && (
-          <p className="mx-auto max-w-[85%] rounded-2xl rounded-bl-md border-[3px] border-ink bg-crest-soft px-4 py-3 font-semibold">
-            Hi{state.user.name ? ` ${state.user.name}` : ''}! Tell me what to pay — airtime, data or light. I&apos;ll show you before I pay anything.
-          </p>
+          <ChatBubble
+            me={false}
+            text={`Hi${state.user.name ? ` ${state.user.name}` : ''}! I’m your AI bill agent. Tell me what to pay — airtime, data or light — and I’ll show you before I pay anything.`}
+          />
         )}
         {state.messages.map((m) => (
           <ChatBubble key={m.id} me={m.role === 'user'} text={m.content} />
         ))}
         {optimistic && <ChatBubble me text={optimistic} />}
         {sending && (
-          <div className="flex gap-1 pl-2">
+          <div className="flex w-fit gap-1 rounded-2xl rounded-bl-md bg-white px-4 py-3 ring-1 ring-ink/10">
             {[0, 1, 2].map((i) => (
-              <span key={i} className="h-2.5 w-2.5 animate-bounce rounded-full bg-mandarin" style={{ animationDelay: `${i * 0.12}s` }} />
+              <span key={i} className="h-2 w-2 animate-bounce rounded-full bg-forest/50" style={{ animationDelay: `${i * 0.12}s` }} />
             ))}
           </div>
         )}
         {confirm && !sending && (
-          <div className="flex gap-2 pl-1">
-            <button onClick={() => send({ confirm: true })} className="press rounded-xl border-[3px] border-ink bg-mandarin px-4 py-2 font-extrabold shadow-chunk-sm">
-              ✅ Pay it{confirm.gd ? ` · G$ ${gdFmt(confirm.gd)}` : ''}
-            </button>
-            <button onClick={() => send({ confirm: false })} className="press rounded-xl border-[3px] border-ink bg-cream px-4 py-2 font-extrabold shadow-chunk-sm">
-              ✖ Cancel
-            </button>
+          <div className="animate-pop ml-0 max-w-[88%] overflow-hidden rounded-2xl border-[3px] border-ink bg-white shadow-chunk-sm">
+            <div className="bg-crest px-4 py-2 text-xs font-extrabold tracking-widest uppercase">Ready to pay</div>
+            <div className="px-4 py-3">
+              <p className="font-bold leading-snug">{confirm.summary}</p>
+              {confirm.gd > 0 && <p className="mt-0.5 text-sm font-semibold text-ink/55">G$ {gdFmt(confirm.gd)} from your jars</p>}
+            </div>
+            <div className="grid grid-cols-2 border-t-[3px] border-ink">
+              <button onClick={() => send({ confirm: false })} className="py-3 font-extrabold hover:bg-cream">
+                Cancel
+              </button>
+              <button onClick={() => send({ confirm: true })} className="border-l-[3px] border-ink bg-mandarin py-3 font-extrabold hover:bg-mandarin-deep">
+                Pay it
+              </button>
+            </div>
           </div>
         )}
-        <div ref={endRef} />
       </div>
-      <div className="flex gap-2 overflow-x-auto border-t-[3px] border-ink bg-cream px-3 pt-3">
-        {CHIPS.map((c) => (
-          <button key={c} onClick={() => send({ text: c })} disabled={sending} className="shrink-0 rounded-full border-2 border-ink bg-white px-3 py-1 text-sm font-bold whitespace-nowrap">
-            {c}
+
+      <div className="border-t-2 border-ink/10 bg-white px-3 pt-3">
+        <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+          {CHIPS.map((c) => (
+            <button
+              key={c}
+              onClick={() => send({ text: c })}
+              disabled={sending}
+              className="shrink-0 rounded-full bg-cream px-3.5 py-1.5 text-sm font-bold whitespace-nowrap ring-1 ring-ink/15 hover:ring-ink/40"
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!text.trim()) return
+            const t = text
+            setText('')
+            send({ text: t })
+          }}
+          className="flex items-center gap-2 py-3"
+        >
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Abeg send ₦500 airtime to 0803…"
+            className="min-w-0 flex-1 rounded-full bg-cream px-5 py-3.5 font-semibold ring-2 ring-transparent outline-none focus:ring-ink"
+          />
+          <button
+            disabled={sending || !text.trim()}
+            aria-label="Send"
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-mandarin text-xl font-extrabold text-ink transition hover:bg-mandarin-deep disabled:bg-ink/10 disabled:text-ink/30"
+          >
+            ↑
           </button>
-        ))}
+        </form>
       </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!text.trim()) return
-          const t = text
-          setText('')
-          send({ text: t })
-        }}
-        className="flex gap-2 bg-cream p-3"
-      >
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="e.g. Abeg send ₦500 airtime to 0803…"
-          className="min-w-0 flex-1 rounded-2xl border-[3px] border-ink bg-white px-4 py-3 font-semibold outline-none focus:bg-crest-soft"
-        />
-        <button disabled={sending || !text.trim()} className="press rounded-2xl border-[3px] border-ink bg-mandarin px-5 font-extrabold shadow-chunk-sm disabled:opacity-50">
-          Send
-        </button>
-      </form>
     </section>
   )
 }
@@ -758,8 +849,8 @@ function ChatBubble({ me, text }: { me: boolean; text: string }) {
   return (
     <div className={`flex ${me ? 'justify-end' : ''}`}>
       <p
-        className={`max-w-[85%] rounded-2xl border-[3px] border-ink px-4 py-2.5 leading-snug font-semibold whitespace-pre-line ${
-          me ? 'rounded-br-md bg-forest text-cream' : 'rounded-bl-md bg-crest-soft'
+        className={`max-w-[85%] rounded-2xl px-4 py-2.5 leading-snug font-medium whitespace-pre-line ${
+          me ? 'rounded-br-md bg-forest text-cream' : 'rounded-bl-md bg-white text-ink ring-1 ring-ink/10'
         }`}
       >
         {text}
