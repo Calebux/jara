@@ -51,12 +51,12 @@ export default function Home() {
                 Meet your AI agent
                 <span className="inline-block h-[0.14em] w-[1.6em] rounded-full bg-mandarin" />
               </span>
-              <span className="block">Your free</span>
               <span className="block">
-                <span className="text-crest">G$,</span> put
+                Your <span className="text-crest">G$,</span>
               </span>
+              <span className="block">put to</span>
               <span className="block">
-                to{' '}
+                {' '}
                 <span className="relative mt-3 inline-block -rotate-3 rounded-[0.18em] border-[5px] border-ink bg-mandarin px-[0.12em] pt-[0.04em] pb-[0.1em] text-ink shadow-[10px_10px_0_0_#0b1f16]">
                   work.
                 </span>
@@ -81,7 +81,7 @@ export default function Home() {
           <div className="mt-12 grid items-end gap-12 lg:mt-14 lg:grid-cols-[1fr_440px]">
             <div>
               <p className="max-w-2xl text-xl leading-snug font-semibold text-cream/90 sm:text-2xl">
-                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly handles everyday money for you. It collects your free GoodDollar every day and makes it useful — your{' '}
+                Jarra is an <span className="rounded-md bg-crest px-1.5 text-ink">AI agent</span> that quietly handles everyday money for you. It collects your GoodDollar every day and makes it useful — your{' '}
                 <span className="text-crest">light, data and airtime</span>, bonuses you&apos;d miss, and{' '}
                 <span className="text-crest">AI help for school and hustle</span>.
               </p>
