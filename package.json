@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "@goodsdks/citizen-sdk": "^1.2.7",
