@@ -63,4 +63,4 @@ The protected backup directory is `/opt/jara-backups/20261112T112711Z`. It conta
 
 The database changes are additive. Do not overwrite the live database with the snapshot after new activity, or discard payment/chain journals. After any owner activates keyless claims, do not restore a binary that ignores `claimer_active`. See the [rollout runbook](keyless-rollout.md) for policy revocation and recovery behavior.
 
-The release was deployed from the current working tree; no commit or push was made as part of deployment. The reviewer update is prepared in [goodbuilders-update.md](goodbuilders-update.md) and has not been sent externally.
+The initial release was deployed from the working tree. Its remediation source is now recorded in commit `b2291847c3642093bcddc9351cb102a2e46d9d78`. The reviewer update is prepared in [goodbuilders-update.md](goodbuilders-update.md) and has not been sent externally.
