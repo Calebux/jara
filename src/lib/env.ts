@@ -134,6 +134,12 @@ export function serverConfig() {
     // Bills run only when both sides match: real G$ with a live provider, or simulated G$
     // with a simulated provider (the mock provider additionally needs the local demo flag).
     billsLive: money.mode === 'live' || (money.mode === 'demo' && (provider !== 'mock' || process.env.DEMO_BILLS === 'true')),
+    // GoodCash: G$ ↔ naira (cash out to a bank, or top up with naira). The publishable key is
+    // NEXT_PUBLIC_GOODCASH_KEY; the secret key and webhook secret stay on the server.
+    goodcash: {
+      secretKey: process.env.GOODCASH_SECRET_KEY ?? '',
+      webhookSecret: process.env.GOODCASH_WEBHOOK_SECRET ?? '',
+    },
     falconpay: {
       apiKey: process.env.FALCONPAY_API_KEY ?? '',
       // sk_live_ keys go to production, everything else to the sandbox.

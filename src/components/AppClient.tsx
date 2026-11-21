@@ -13,6 +13,7 @@ import { Markdown } from './Markdown'
 import { walletClaimerMessage, walletKeyExportMessage, walletLoginMessage } from '@/lib/wallet-login'
 import { spendingPolicyAbi } from '@/lib/spending-policy'
 import { useSheetDialog } from './useSheetDialog'
+import { GoodCashCard } from './GoodCash'
 import { DashboardNav, dashboardView, type DashboardView } from './DashboardNav'
 import { DailyChallenge } from './DailyChallenge'
 import { FlowVote } from './FlowVote'
@@ -1091,6 +1092,9 @@ function ProfileSheet({ state, setState, flash, onClose, onSignOut }: { state: S
           {state.config.chainMode === 'mock' && <div className="rounded-2xl bg-white p-5"><p className="font-bold">Your demo wallet</p><p className="mt-2 text-sm leading-relaxed text-ink/60">This preview uses simulated G$. Explore your jars and try a budget move. No real wallet is connected.</p></div>}
           {state.config.chainMode !== 'mock' && <ClaimHealthCard state={state} setState={setState} flash={flash} />}
           {state.config.chainMode !== 'mock' && <SpendingCard state={state} setState={setState} flash={flash} />}
+          {state.config.chainMode !== 'mock' && state.user.rootAddress && (
+            <GoodCashCard userId={state.user.id} wallet={state.user.rootAddress as `0x${string}`} flash={flash} defaultAmountG={snap.walletGd} heldByJara={snap.mode === 'jar'} />
+          )}
           {state.config.chainMode !== 'mock' && (state.config.keylessAvailable || state.user.claimerAddress) && <ClaimerCard state={state} setState={setState} flash={flash} />}
           {state.config.chainMode !== 'mock' && snap.mode === 'jar' && <GasCard state={state} setState={setState} flash={flash} />}
           {state.config.chainMode !== 'mock' && snap.mode === 'jar' && <WalletCard state={state} setState={setState} flash={flash} />}
@@ -2571,6 +2575,9 @@ const ACT_STYLE: Record<string, { icon: IconName; tint: string; sign: '+' | '−
   move: { icon: 'arrow', tint: 'bg-cream', sign: '' },
   ai: { icon: 'sparkle', tint: 'bg-forest-soft text-cream', sign: '−' },
   agent: { icon: 'jar', tint: 'bg-ink text-cream', sign: '' },
+  // GoodCash: G$ out to a bank, or naira in for G$. Amounts are naira, so no G$ sign.
+  cashout: { icon: 'arrow', tint: 'bg-mandarin', sign: '' },
+  topup: { icon: 'plus', tint: 'bg-crest-soft', sign: '' },
 }
 
 function AgentLog({ items, chainMode }: { items: Activity[]; chainMode: string }) {
