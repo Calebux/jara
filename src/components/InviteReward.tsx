@@ -56,7 +56,9 @@ export function InviteReward({ initial, name, flash }: { initial: InviteRewardSt
   }, [processing, reward?.paid.length, flash])
 
   if (!reward?.enabled) return null
-  const { friendsPerReward: goal, rewardNgn, towardNext } = reward
+  const { friendsPerReward: goal, rewardNgn, towardNext, verifiedFriends: invited } = reward
+  // Always the real total (e.g. 13), counting toward the next full set of 10 (20).
+  const nextAt = invited - towardNext + goal
   // "G$ 33,300 (≈ ₦5,000)", or the naira value alone while the G$ price is unavailable.
   const prize = reward.rewardGd ? `${gd(reward.rewardGd)} (≈ ${ngn(rewardNgn)})` : `G$ worth ${ngn(rewardNgn)}`
   const lastPaid = reward.paid.at(-1)
@@ -67,9 +69,9 @@ export function InviteReward({ initial, name, flash }: { initial: InviteRewardSt
         <div className="mt-4 overflow-hidden rounded-2xl bg-forest text-cream">
           <div className="p-5">
             <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">Reward ready</p>
-            <p className="mt-1 text-xl leading-snug font-bold">🎉 Congratulations{name ? `, ${name.split(' ')[0]}` : ''}!</p>
+            <p className="mt-1 text-xl leading-snug font-bold">🎉 {reward.ready > 1 ? 'Another milestone' : 'Congratulations'}{name ? `, ${name.split(' ')[0]}` : ''}!</p>
             <p className="mt-1 text-sm leading-relaxed text-cream/85">
-              You’ve brought {goal * reward.ready} verified friends to Jara. Your <b className="text-cream">{prize}</b> reward is ready. Cash it out to your bank account with GoodCash.
+              You’ve reached {goal * reward.ready} verified friends on Jara{reward.ready > 1 ? `: another ${goal}` : ''}. Your <b className="text-cream">{prize}</b> reward is ready. Cash it out to your bank account with GoodCash.
             </p>
             {reward.lastFailed?.error && <p className="mt-3 rounded-xl bg-cream/10 px-3 py-2 text-sm font-semibold">{reward.lastFailed.error}</p>}
             <button onClick={() => setOpen(true)} className="app-button mt-4 w-full justify-center bg-mandarin text-white hover:opacity-95 min-h-12 text-sm">
@@ -88,14 +90,14 @@ export function InviteReward({ initial, name, flash }: { initial: InviteRewardSt
       ) : (
         <div className="mt-4 rounded-2xl bg-[#f4f5ef] p-5">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="font-bold">Invite {goal} friends, get {prize}</p>
-            <span className="shrink-0 text-sm font-bold text-forest">{towardNext}/{goal}</span>
+            <p className="font-bold">{invited > 0 ? `You’ve invited ${invited} verified friend${invited === 1 ? '' : 's'}` : `Invite ${goal} friends, get ${prize}`}</p>
+            <span className="shrink-0 text-sm font-bold text-forest">{invited}/{nextAt}</span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink/10">
             <div className="h-full rounded-full bg-mandarin transition-all" style={{ width: `${Math.max((towardNext / goal) * 100, 4)}%` }} />
           </div>
           <p className="mt-2 text-xs font-semibold text-ink/55">
-            {goal - towardNext} more verified friend{goal - towardNext === 1 ? '' : 's'} to unlock it. Cash it out to your bank with GoodCash.
+            {nextAt - invited} more to reach {nextAt} and unlock {invited > 0 ? `your next ${prize} reward` : 'it'}. Every {goal} verified friends earns one, cashed out to your bank with GoodCash.
           </p>
         </div>
       )}
