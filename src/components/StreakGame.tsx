@@ -366,12 +366,13 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
         <div className="mt-4 rounded-2xl bg-cream/10 p-4 ring-1 ring-cream/15" aria-label={`${prize}, shared equally by the top ${event.winners}`}>
           <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">🏆 Prize pool</p>
           <p className="text-[32px] leading-tight font-bold tracking-tight tabular-nums">G$ {num(event.prizePoolGd)}</p>
-          <p className="text-sm text-cream/80">The top {event.winners} share it equally: <b className="text-cream">G$ {num(event.prizeEachGd)} each</b></p>
+          <p className="text-sm text-cream/80">Split between the top {event.winners}. The higher you finish, the more you take.</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            {Array.from({ length: Math.min(event.winners, 3) }, (_, i) => (
-              <div key={i} className="rounded-xl bg-forest-deep/60 px-2 py-2 text-center">
-                <p className="text-lg leading-none">{MEDALS[i]}</p>
-                <p className="mt-1 text-xs font-bold tabular-nums">G$ {num(event.prizeEachGd)}</p>
+            {event.prizesGd.slice(0, 3).map((amount, i) => (
+              <div key={i} className={`rounded-xl px-2 text-center ${i === 0 ? 'bg-crest py-3 text-ink' : 'bg-forest-deep/60 py-2'}`}>
+                <p className={i === 0 ? 'text-2xl leading-none' : 'text-lg leading-none'}>{MEDALS[i]}</p>
+                <p className="mt-1 text-[10px] font-bold tracking-wide uppercase opacity-70">{['1st', '2nd', '3rd'][i]}</p>
+                <p className={`font-bold tabular-nums ${i === 0 ? 'text-base' : 'text-sm'}`}>G$ {num(amount)}</p>
               </div>
             ))}
           </div>
@@ -651,7 +652,7 @@ function PlayerRow({ p, board }: { p: StreakBoard['top'][number]; board: StreakB
       </span>
       <span className="shrink-0 text-right">
         <span className="block text-sm font-bold tabular-nums">{num(p.score)}</span>
-        {prize && <span className="block text-[11px] font-bold text-mandarin">wins G$ {num(board.prizeEachGd)}</span>}
+        {prize && <span className="block text-[11px] font-bold text-mandarin">wins G$ {num(board.prizesGd[p.rank - 1] ?? 0)}</span>}
       </span>
     </li>
   )
@@ -741,7 +742,7 @@ export function StreakLeaderboardPage() {
           )}
           <p className="mt-3 text-xs font-semibold text-ink/50">
             {board.phase === 'closed'
-              ? board.prizes.length ? (`🏆 Winners confirmed: G$ ${num(board.prizes[0].amountGd)} each. ${board.prizes.every((p) => p.claimed) ? 'All prizes claimed.' : 'Winners: open Jara Streak to claim your prize.'}`) : 'Final scores. Prizes go out shortly.'
+              ? board.prizes.length ? (`🏆 Winners confirmed: ${board.prizes.map((p) => `${MEDALS[p.rank - 1] ?? `#${p.rank}`} G$ ${num(p.amountGd)}`).join(' · ')}. ${board.prizes.every((p) => p.claimed) ? 'All prizes claimed.' : 'Winners: open Jara Streak to claim your prize.'}`) : 'Final scores. Prizes go out shortly.'
               : `Each player’s best run counts. 🔥 is their longest streak. Campuses add up their players’ best runs.`}
           </p>
         </section>
@@ -780,7 +781,7 @@ function Rules({ home }: { home: StreakHome }) {
     ['🔥', <>Combos: <b>5 in a row ×2</b>, 10 in a row ×3, 20 in a row ×4. Faster answers score more.</>],
     ['🎯', <><b>{event.runsPerDay} runs a day</b> (resets at midnight). Only your best run counts on the leaderboard.</>],
     ['⚡', <><b>Golden Hours</b>: surprise windows when every point counts double. Follow Jara’s socials so you don’t miss them.</>],
-    ['🏆', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the <b>top {event.winners}</b> share the <b>G$ {num(event.prizePoolGd)} prize pool</b> equally: <b>G$ {num(event.prizeEachGd)} each</b>. Winners tap <b>Claim</b> and it goes to their wallet. Buy airtime or data in Jara, or cash out to your bank.</>],
+    ['🏆', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the <b>top {event.winners}</b> share the <b>G$ {num(event.prizePoolGd)} prize pool</b>: {event.prizesGd.map((g, i) => <span key={i}>{i ? ', ' : ''}<b>{['1st', '2nd', '3rd'][i] ?? `#${i + 1}`} G$ {num(g)}</b></span>)}. Winners tap <b>Claim</b> and it goes to their wallet. Buy airtime or data in Jara, or cash out to your bank.</>],
   ]
   return (
     <section className="app-card p-5 sm:p-6">

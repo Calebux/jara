@@ -26,8 +26,8 @@ import { lagosDay, multiplier, points, questionMs } from './rules'
 // and sent to the player's verified wallet in one transfer when the run ends (never mid-run, so paying
 // never eats into the clock). Bounded by a bounty-wide pool and a per-player daily cap.
 //
-// When the bounty closes, the top STREAK_WINNERS are frozen once and share STREAK_PRIZE_POOL_GD
-// equally. Each winner claims their share; it goes to their verified wallet, exactly once. All G$
+// When the bounty closes, the top places are frozen once and the STREAK_PRIZE_POOL_GD is split by
+// rank (STREAK_PRIZE_SPLIT: 40/35/25). Each winner claims their share; it goes to their verified wallet, exactly once. All G$
 // (prizes and per-answer) comes from the streak wallet (STREAK_WALLET_PRIVATE_KEY, else the
 // treasury). Everything players see is in G$.
 
@@ -48,13 +48,13 @@ export function streakConfig() {
   const problem = !s.startAt || !s.endAt ? 'STREAK_START_AT and STREAK_END_AT are not set'
     : s.endAt <= s.startAt ? 'STREAK_END_AT must be after STREAK_START_AT'
     : !whole(s.prizePoolGd) ? 'STREAK_PRIZE_POOL_GD must be a whole number of G$'
-    : !whole(s.winners) || s.winners < 1 || s.winners > 20 ? 'STREAK_WINNERS must be 1–20'
+    : s.prizeSplit.length < 1 || s.prizeSplit.length > 20 || !s.prizeSplit.every((x) => whole(x) && x > 0) || s.prizeSplit.reduce((a, b) => a + b, 0) !== 100 ? 'STREAK_PRIZE_SPLIT must be whole percentages for 1st, 2nd, 3rd… that add up to 100 (e.g. 40,35,25)'
     : !whole(s.runsPerDay) || s.runsPerDay < 1 ? 'STREAK_RUNS_PER_DAY must be at least 1'
     : !whole(s.runsPerFriend) || !whole(s.maxFriendRuns) ? 'STREAK_RUNS_PER_FRIEND and STREAK_MAX_FRIEND_RUNS must be whole numbers'
     : !(s.goldenMinutes > 0 && s.goldenMinutes <= 180) ? 'STREAK_GOLDEN_MINUTES must be 1–180'
     : !whole(s.perCorrectGd) || !whole(s.poolCapGd) || !whole(s.dailyCapGd) ? 'STREAK_PER_CORRECT_GD, STREAK_POOL_CAP_GD and STREAK_DAILY_CAP_GD must be whole numbers'
     : null
-  return { ...s, invitesFrom: s.invitesFrom || s.startAt, configured: problem === null, problem }
+  return { ...s, winners: s.prizeSplit.length, invitesFrom: s.invitesFrom || s.startAt, configured: problem === null, problem }
 }
 type Config = ReturnType<typeof streakConfig>
 
@@ -348,7 +348,7 @@ export async function leaderboard(viewer: User | null, limit = 20) {
     playingNow,
     winners: cfg.winners,
     prizePoolGd: cfg.prizePoolGd,
-    prizeEachGd: prizeEachGd(cfg),
+    prizesGd: prizesGd(cfg),
     top: rows.map((x, i) => ({
       rank: i + 1,
       name: (x.name as string | null)?.trim().split(/\s+/).slice(0, 2).join(' ') || `Player ${short(String(x.root_address))}`,
@@ -383,7 +383,7 @@ export async function streakHome(user: User | null) {
       startAt: cfg.configured ? cfg.startAt : null,
       endAt: cfg.configured ? cfg.endAt : null,
       prizePoolGd: cfg.prizePoolGd,
-      prizeEachGd: prizeEachGd(cfg),
+      prizesGd: prizesGd(cfg),
       winners: cfg.winners,
       runsPerDay: cfg.runsPerDay,
       runsPerFriend: cfg.runsPerFriend,
@@ -419,15 +419,15 @@ export function streakBanner() {
     const cfg = streakConfig()
     const phase = streakPhase(cfg)
     if (phase === 'off') return undefined
-    return { phase, startAt: cfg.startAt, endAt: cfg.endAt, prizePoolGd: cfg.prizePoolGd, prizeEachGd: prizeEachGd(cfg), winners: cfg.winners, perCorrectGd: answerGdOn(cfg) ? cfg.perCorrectGd : 0, golden: goldenState(cfg) }
+    return { phase, startAt: cfg.startAt, endAt: cfg.endAt, prizePoolGd: cfg.prizePoolGd, prizesGd: prizesGd(cfg), winners: cfg.winners, perCorrectGd: answerGdOn(cfg) ? cfg.perCorrectGd : 0, golden: goldenState(cfg) }
   } catch (err) {
     console.error('[streak] configuration error', err instanceof Error ? err.message : err)
     return undefined
   }
 }
 
-/** Each winner's share of the prize pool (G$ 100,000 shared by 3 → G$ 33,333 each). */
-export const prizeEachGd = (cfg: Config = streakConfig()) => Math.floor(cfg.prizePoolGd / cfg.winners)
+/** The prize for each place, 1st first: the pool split by STREAK_PRIZE_SPLIT (G$ 40,000, 35,000, 25,000). */
+export const prizesGd = (cfg: Config = streakConfig()) => cfg.prizeSplit.map((pct) => Math.floor((cfg.prizePoolGd * pct) / 100))
 
 /**
  * After the bounty closes: freeze the winners, once. The cron calls this every minute; the game page
@@ -439,12 +439,12 @@ export async function finalizeWinners() {
   if (cfg.prizePoolGd <= 0) return { eventId: cfg.eventId, status: 'no_prize' as const, prizes: [] }
   const frozen = Number((await run('SELECT COUNT(*) AS n FROM streak_prizes WHERE event_id = ?', [cfg.eventId])).rows[0].n) > 0
   if (!frozen) {
-    const amountGd = prizeEachGd(cfg)
+    const amounts = prizesGd(cfg)
     const top = (await run(`SELECT root_address, user_id, best_score FROM streak_players WHERE event_id = ? AND best_score > 0 ORDER BY ${ORDER} LIMIT ?`, [cfg.eventId, cfg.winners])).rows
     await atomic(async (tx) => {
       if (Number((await tx.execute({ sql: 'SELECT COUNT(*) AS n FROM streak_prizes WHERE event_id = ?', args: [cfg.eventId] })).rows[0].n) > 0) return
       for (const [i, row] of top.entries()) {
-        await tx.execute({ sql: 'INSERT INTO streak_prizes (event_id, rank, root_address, user_id, score, amount_gd) VALUES (?, ?, ?, ?, ?, ?)', args: [cfg.eventId, i + 1, String(row.root_address), String(row.user_id), Number(row.best_score), amountGd] })
+        await tx.execute({ sql: 'INSERT INTO streak_prizes (event_id, rank, root_address, user_id, score, amount_gd) VALUES (?, ?, ?, ?, ?, ?)', args: [cfg.eventId, i + 1, String(row.root_address), String(row.user_id), Number(row.best_score), amounts[i]] })
       }
     })
   }
@@ -556,7 +556,7 @@ export async function streakReport() {
   const wallet = await (async () => { const address = streakWalletAddress(); return { address, gd: Number(await gdBalance(address)) / 1e18 } })().catch(() => null)
   return {
     eventId: cfg.eventId, phase: streakPhase(cfg), problem: cfg.problem, wallet,
-    prizePool: { totalGd: cfg.prizePoolGd, eachGd: prizeEachGd(cfg), winners: cfg.winners },
+    prizePool: { totalGd: cfg.prizePoolGd, byPlaceGd: prizesGd(cfg), winners: cfg.winners },
     players: { joined: Number(players.joined), played: Number(players.played), runs: Number(players.runs), longestStreak: Number(players.longest) },
     answers: { answered: Number(answers.answered), correct: Number(answers.correct) },
     answerGd: { perCorrect: cfg.perCorrectGd, poolCap: cfg.poolCapGd, dailyCap: cfg.dailyCapGd, earned: Number(gd.earned), sent: Number(gd.sent), runsWaiting: Number(gd.runs_waiting), poolLeft: Math.max(0, cfg.poolCapGd - Number(gd.earned)) },

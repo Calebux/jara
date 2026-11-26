@@ -11,7 +11,7 @@ export type StreakBannerState = {
   startAt: number
   endAt: number
   prizePoolGd: number
-  prizeEachGd: number
+  prizesGd: number[]
   winners: number
   perCorrectGd: number
   golden: { live: boolean; startsAt: number | null; endsAt: number | null }

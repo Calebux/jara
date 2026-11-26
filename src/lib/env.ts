@@ -160,11 +160,12 @@ export function serverConfig() {
       endAt: time('STREAK_END_AT'),
       // Friends who join from this moment earn extra runs (defaults to the start).
       invitesFrom: time('STREAK_INVITES_FROM'),
-      // The prize pool, shared equally by the top STREAK_WINNERS (G$ 100,000 → G$ 33,333 each).
+      // The prize pool, split by rank: STREAK_PRIZE_SPLIT percent for 1st, 2nd, 3rd… (40,35,25 of
+      // G$ 100,000 → G$ 40,000, 35,000, 25,000). The number of winners is the number of places.
       prizePoolGd: num('STREAK_PRIZE_POOL_GD', 100000),
+      prizeSplit: (process.env.STREAK_PRIZE_SPLIT || '40,35,25').split(',').map((x) => Number(x.trim())),
       // The wallet that pays prizes and per-answer G$. Unset: the treasury.
       walletKey: (process.env.STREAK_WALLET_PRIVATE_KEY || undefined) as `0x${string}` | undefined,
-      winners: num('STREAK_WINNERS', 3),
       // G$ for every correct answer, sent to the player's wallet after each run. Stops when the
       // whole bounty has paid STREAK_POOL_CAP_GD (0 turns per-answer G$ off), and each player earns
       // at most STREAK_DAILY_CAP_GD a day (Lagos time).
