@@ -9,7 +9,7 @@ const HOUR = 3_600_000
 Object.assign(process.env, {
   DATABASE_URL: `file:${directory}/test.db`, CHAIN_MODE: 'mock', TOPUP_PROVIDER: 'mock', GD_NGN_RATE: '0.2', CRON_SECRET: 'cron',
   STREAK_EVENT_ID: 'test-streak', STREAK_START_AT: String(Date.now() - HOUR), STREAK_END_AT: String(Date.now() + HOUR),
-  STREAK_PRIZE_GD: '32000', STREAK_WINNERS: '3', STREAK_RUNS_PER_DAY: '5', STREAK_RUNS_PER_FRIEND: '3', STREAK_MAX_FRIEND_RUNS: '30',
+  STREAK_PRIZE_POOL_GD: '100000', STREAK_WINNERS: '3', STREAK_RUNS_PER_DAY: '5', STREAK_RUNS_PER_FRIEND: '3', STREAK_MAX_FRIEND_RUNS: '30',
   STREAK_GOLDEN_HOURS: '', STREAK_GOLDEN_MINUTES: '15', STREAK_REQUIRE_FLOWSTATE: 'false',
   STREAK_PER_CORRECT_GD: '20', STREAK_POOL_CAP_GD: '100000', STREAK_DAILY_CAP_GD: '100',
 })
@@ -208,30 +208,36 @@ test('G$ 20 per correct answer: shown at once, sent to the wallet once when the 
   assert.ok(report.campuses.some((c) => c.campus === 'UNILAG'))
 })
 
-test('the top 3 are paid G$ 32,000 each to their own wallet, exactly once, only after the end', async () => {
-  // Three clear leaders.
+test('the top 3 share the G$ 100,000 pool equally, claim it once, only after the end', async () => {
   const leaders = []
   for (const n of [12, 11, 10]) { const u = await player(); await correctRun(u, n); leaders.push(u) }
-  assert.equal((await streak.payWinners()).status, 'not_closed')
-  const balances = async () => Promise.all(leaders.map(async (u) => Number(await chain.gdBalance(u.rootAddress)) / 1e18))
-  const before = await balances()
+  const fourth = await player(); await correctRun(fourth, 1)
+  assert.equal((await streak.finalizeWinners()).status, 'not_closed')
+  await assert.rejects(streak.claimPrize(leaders[0]), (err) => err.code === 'streak_open')
+  const balance = async (u) => Number(await chain.gdBalance(u.rootAddress)) / 1e18
+  const before = await Promise.all(leaders.map(balance))
   process.env.STREAK_END_AT = String(Date.now() - 1000)
   try {
-    const out = await streak.payWinners()
-    assert.equal(out.status, 'done')
-    assert.deepEqual(out.prizes.map((p) => p.status), ['paid', 'paid', 'paid'])
-    assert.equal(out.prizes[0].amountGd, 32_000)
-    const board = await streak.leaderboard(null)
-    assert.deepEqual(board.top.slice(0, 3).map((p) => p.score), (await run("SELECT score FROM streak_prizes WHERE event_id = 'test-streak' ORDER BY rank")).rows.map((r) => Number(r.score)))
+    const out = await streak.finalizeWinners()
+    assert.equal(out.status, 'frozen')
+    assert.deepEqual(out.prizes.map((p) => [p.rank, p.amountGd, p.claimed]), [[1, 33_333, false], [2, 33_333, false], [3, 33_333, false]])
     const winners = (await run("SELECT user_id FROM streak_prizes WHERE event_id = 'test-streak' ORDER BY rank")).rows.map((r) => r.user_id)
     assert.deepEqual(winners, leaders.map((u) => u.id))
-    // Again (the cron runs every minute): nothing more is sent.
-    await streak.payWinners()
-    const afterBalances = await balances()
-    assert.deepEqual(afterBalances.map((b, i) => Math.round(b - before[i])), [32_000, 32_000, 32_000])
-    assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE type = 'reward' AND title LIKE '%Jara Streak: #%'")).rows[0].n, 3)
-    // No new runs once it has ended.
-    await assert.rejects(streak.startRun(leaders[0]), (err) => err.code === 'streak_closed')
+    // Nothing is sent until the winner claims.
+    assert.deepEqual((await Promise.all(leaders.map(balance))).map((b, i) => Math.round(b - before[i])), [0, 0, 0])
+    const home = await streak.streakHome(leaders[0])
+    assert.deepEqual(home.prize, { rank: 1, amountGd: 33_333, claimed: false, txHash: null })
+    assert.equal(home.event.prizePoolGd, 100_000)
+    assert.equal(home.event.prizeEachGd, 33_333)
+    const claimed = await streak.claimPrize(leaders[0])
+    assert.equal(claimed.prize.claimed, true)
+    // Claiming again (double tap, retry) sends nothing more; a non-winner has nothing to claim.
+    await streak.claimPrize(leaders[0])
+    await assert.rejects(streak.claimPrize(fourth), (err) => err.code === 'no_prize')
+    await streak.finalizeWinners()
+    assert.deepEqual((await Promise.all(leaders.map(balance))).map((b, i) => Math.round(b - before[i])), [33_333, 0, 0])
+    assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE type = 'reward' AND title LIKE '%Jara Streak: #%'")).rows[0].n, 1)
+    await assert.rejects(streak.startRun(leaders[1]), (err) => err.code === 'streak_closed')
   } finally { process.env.STREAK_END_AT = String(Date.now() + HOUR) }
 })
 

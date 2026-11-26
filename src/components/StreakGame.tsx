@@ -14,7 +14,7 @@ import { StreakAudio } from './streak-audio'
 // when it ends win a G$ prize each (STREAK_PRIZE_GD). The server keeps the clock and the score; this screen plays.
 
 type Result = { correct: boolean; timedOut: boolean; correctChoice: number | null; points: number; golden: boolean; newBest: boolean; gd: number; gdNote: 'daily_cap' | 'pool_empty' | null }
-type Float = { key: number; text: string; gd: number; golden: boolean }
+type Float = { key: number; points: number; gd: number; streak: number; golden: boolean }
 type Reveal = { run: StreakRunView; choice: number | null; correctChoice: number | null }
 
 async function request<T>(url: string, body?: object): Promise<T> {
@@ -164,7 +164,7 @@ export function StreakGame() {
       const before = multiplier(next.streak - 1)
       audio.current?.correct(next.streak)
       if (multiplier(next.streak) > before) { audio.current?.combo(); setToast(`🔥 ${next.streak} in a row! Points ×${multiplier(next.streak)}`) }
-      setFloat({ key: Date.now(), text: `+${num(result.points)} pts`, gd: result.gd, golden: result.golden })
+      setFloat({ key: Date.now(), points: result.points, gd: result.gd, streak: next.streak, golden: result.golden })
       if (result.gdNote && !capNoted.current) {
         capNoted.current = true
         setToast(result.gdNote === 'daily_cap' ? 'You’ve earned today’s G$ limit. Points still count for the prize!' : 'The G$ pool for answers is used up. Points still count for the prize!')
@@ -275,6 +275,8 @@ export function StreakGame() {
 
           {error && <p role="alert" className="rounded-xl bg-[#fde8e2] p-3 text-sm font-semibold text-[#8a2a12]">{error}</p>}
 
+          {event.phase === 'closed' && home.prize && <ClaimCard home={home} onClaimed={(h) => { setHome(h); audio.current?.best() }} onError={setError} />}
+
           <Setup home={home} />
 
           {(event.phase === 'open' || event.phase === 'closed') && board && <TopThree board={board} />}
@@ -332,7 +334,7 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
   onPlay: (details?: { campus?: string; name?: string }) => void; onJoined: (h: StreakHome) => void; onError: (e: string | null) => void
 }) {
   const { event } = home
-  const prize = `Top ${event.winners} win G$ ${num(event.prizeGd)} each`
+  const prize = `G$ ${num(event.prizePoolGd)} prize pool`
   if (event.phase === 'off') {
     return (
       <section className="app-card p-6">
@@ -361,8 +363,20 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
         </p>
         <h1 className="mt-1 text-[34px] leading-tight font-bold tracking-[-0.04em]">Jara Streak <span className="streak-flame">🔥</span></h1>
         <p className="mt-1 text-cream/80">How many can you get right in a row?</p>
+        <div className="mt-4 rounded-2xl bg-cream/10 p-4 ring-1 ring-cream/15" aria-label={`${prize}, shared equally by the top ${event.winners}`}>
+          <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">🏆 Prize pool</p>
+          <p className="text-[32px] leading-tight font-bold tracking-tight tabular-nums">G$ {num(event.prizePoolGd)}</p>
+          <p className="text-sm text-cream/80">The top {event.winners} share it equally: <b className="text-cream">G$ {num(event.prizeEachGd)} each</b></p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {Array.from({ length: Math.min(event.winners, 3) }, (_, i) => (
+              <div key={i} className="rounded-xl bg-forest-deep/60 px-2 py-2 text-center">
+                <p className="text-lg leading-none">{MEDALS[i]}</p>
+                <p className="mt-1 text-xs font-bold tabular-nums">G$ {num(event.prizeEachGd)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
-          <span className="rounded-full bg-mandarin px-3 py-1.5 text-white">🏆 {prize}</span>
           {event.perCorrectGd > 0 && <span className="rounded-full bg-crest px-3 py-1.5 text-ink">💰 G$ {num(event.perCorrectGd)} per correct answer</span>}
           <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">Free to play</span>
           {home.campus && <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">🎓 {home.campus}</span>}
@@ -432,7 +446,7 @@ function PlayCard({ run, left, busy, picked, reveal, golden, float, shake, glow,
         <div className="flex items-center gap-2">
           {golden && <span className="rounded-full bg-crest px-2.5 py-1 text-xs font-bold text-ink">⚡ ×2</span>}
           {combo > 1 && <span className="rounded-full bg-mandarin px-2.5 py-1 text-xs font-bold text-white">×{combo} combo</span>}
-          <span className="flex items-center gap-1 rounded-full bg-forest px-3 py-1 text-sm font-bold text-cream"><span className={run.streak > 0 ? 'streak-flame' : ''}>🔥</span> {run.streak}</span>
+          <span key={`streak-${run.streak}`} className={`flex items-center gap-1 rounded-full bg-forest px-3 py-1 text-sm font-bold text-cream ${run.streak > 0 ? 'streak-bump' : ''}`}><span className={run.streak > 0 ? 'streak-flame' : ''}>🔥</span> {run.streak}</span>
         </div>
       </div>
 
@@ -441,12 +455,7 @@ function PlayCard({ run, left, busy, picked, reveal, golden, float, shake, glow,
       </div>
       <p className={`mt-1 text-right text-xs font-bold tabular-nums ${urgent ? 'text-mandarin' : 'text-ink/50'}`} aria-live="polite">{(left / 1000).toFixed(1)}s</p>
 
-      {float && (
-        <span key={float.key} className={`streak-float pointer-events-none absolute top-16 left-1/2 z-10 grid justify-items-center rounded-2xl px-3 py-1.5 text-center font-black shadow-sm ${float.golden ? 'bg-crest text-ink' : 'bg-[#e9f3e4] text-forest'}`}>
-          <span className="text-lg leading-tight">✓ {float.text}</span>
-          {float.gd > 0 && <span className="text-sm leading-tight">+G$ {num(float.gd)} earned</span>}
-        </span>
-      )}
+      {float && <StreakBurst key={float.key} float={float} />}
 
       <p className="mt-2 text-[11px] font-bold tracking-[0.14em] text-forest/60 uppercase">{q.topic}</p>
       <h2 className="mt-1 min-h-16 text-2xl leading-snug font-bold tracking-tight">{q.prompt}</h2>
@@ -470,11 +479,32 @@ function PlayCard({ run, left, busy, picked, reveal, golden, float, shake, glow,
   )
 }
 
+const SPARKS = [
+  { dx: '-58px', dy: '-34px', rot: '-25deg' }, { dx: '60px', dy: '-30px', rot: '25deg' }, { dx: '-34px', dy: '-70px', rot: '-10deg' },
+  { dx: '36px', dy: '-72px', rot: '12deg' }, { dx: '0px', dy: '-88px', rot: '0deg' },
+]
+
+/** A correct answer: a fire burst with what it added (G$ 20, or the points once the G$ cap is reached). */
+function StreakBurst({ float }: { float: Float }) {
+  const hot = float.streak >= 5
+  return (
+    <span aria-hidden className="pointer-events-none absolute top-14 left-1/2 z-10">
+      {(hot ? SPARKS : SPARKS.slice(0, 3)).map((s, i) => (
+        <span key={i} className="streak-spark text-lg" style={{ '--dx': s.dx, '--dy': s.dy, '--rot': s.rot, animationDelay: `${i * 40}ms` } as React.CSSProperties}>🔥</span>
+      ))}
+      <span className={`streak-burst absolute left-0 grid min-w-28 justify-items-center rounded-2xl px-4 py-2 text-center shadow-lg ${float.golden ? 'bg-crest text-ink' : hot ? 'bg-mandarin text-white' : 'bg-forest text-cream'}`}>
+        <span className="flex items-center gap-1 text-2xl leading-none font-black"><span className="streak-flame">🔥</span>{float.gd > 0 ? `+${num(float.gd)}` : `+${num(float.points)}`}</span>
+        <span className="mt-1 text-[11px] leading-none font-bold whitespace-nowrap opacity-90">{float.gd > 0 ? `G$ · ${float.streak} in a row` : `pts · ${float.streak} in a row`}{float.golden ? ' · ⚡×2' : ''}</span>
+      </span>
+    </span>
+  )
+}
+
 function GameOver({ run, best, home, board, busy, onAgain }: { run: StreakRunView; best: boolean; home: StreakHome; board: StreakBoard | null; busy: boolean; onAgain: () => void }) {
   const you = board?.you
   const runsLeft = home.runs?.left ?? 0
   const title = run.ended === 'timeout' ? '⏰ Time’s up!' : run.ended === 'wrong' ? 'Run over!' : run.ended === 'cleared' ? '🤯 You answered every question!' : run.ended === 'closed' ? 'The bounty has ended' : 'Run over'
-  const share = `🔥 I just hit a ${run.streak} streak (${num(run.score)} pts) on Jara Streak! Top ${home.event.winners} win G$ ${num(home.event.prizeGd)} each. Beat me 👉 ${home.inviteLink ?? ''}`
+  const share = `🔥 I just hit a ${run.streak} streak (${num(run.score)} pts) on Jara Streak! The top ${home.event.winners} share a G$ ${num(home.event.prizePoolGd)} prize pool. Beat me 👉 ${home.inviteLink ?? ''}`
   return (
     <section className="app-card streak-rise overflow-hidden">
       <div className="bg-[#f4f5ef] px-5 py-5 text-center sm:px-6">
@@ -513,6 +543,34 @@ function ShareButton({ text, label = 'Share' }: { text: string; label?: string }
     await navigator.clipboard?.writeText(text).then(() => setDone(true), () => undefined)
   }
   return <button type="button" onClick={() => void share()} className="app-button-secondary justify-center text-sm">{done ? 'Copied!' : label}</button>
+}
+
+/** After the bounty ends, a winner claims their share of the prize pool. */
+function ClaimCard({ home, onClaimed, onError }: { home: StreakHome; onClaimed: (h: StreakHome) => void; onError: (e: string | null) => void }) {
+  const [busy, setBusy] = useState(false)
+  const prize = home.prize!
+  const claim = async () => {
+    setBusy(true); onError(null)
+    try { onClaimed(await request<StreakHome>('/api/streak/claim', {})) }
+    catch (e) { onError(responseMessage(e)) }
+    finally { setBusy(false) }
+  }
+  return (
+    <section className="streak-rise overflow-hidden rounded-[22px] bg-crest p-5 text-ink sm:p-6">
+      <p className="text-4xl">{MEDALS[prize.rank - 1] ?? '🏆'}</p>
+      <h2 className="mt-2 text-2xl font-bold tracking-tight">You finished #{prize.rank}{home.name ? `, ${home.name.split(' ')[0]}` : ''}!</h2>
+      {prize.claimed ? (
+        <p className="mt-1 font-semibold">✓ Claimed. <b>G$ {num(prize.amountGd)}</b> is in your wallet. Buy airtime or data in Jara, or cash out to your bank.</p>
+      ) : (
+        <>
+          <p className="mt-1 font-semibold">Your share of the prize pool: <b>G$ {num(prize.amountGd)}</b>. Claim it and it goes straight to your wallet.</p>
+          <button onClick={() => void claim()} disabled={busy} className="app-button mt-4 min-h-14 w-full justify-center bg-forest text-base text-cream hover:bg-forest-soft disabled:opacity-60">
+            {busy ? 'Sending to your wallet…' : `Claim G$ ${num(prize.amountGd)}`}
+          </button>
+        </>
+      )}
+    </section>
+  )
 }
 
 function Setup({ home }: { home: StreakHome }) {
@@ -593,7 +651,7 @@ function PlayerRow({ p, board }: { p: StreakBoard['top'][number]; board: StreakB
       </span>
       <span className="shrink-0 text-right">
         <span className="block text-sm font-bold tabular-nums">{num(p.score)}</span>
-        {prize && <span className="block text-[11px] font-bold text-mandarin">G$ {num(board.prizeGd)}</span>}
+        {prize && <span className="block text-[11px] font-bold text-mandarin">wins G$ {num(board.prizeEachGd)}</span>}
       </span>
     </li>
   )
@@ -648,7 +706,7 @@ export function StreakLeaderboardPage() {
           {board?.phase === 'open' ? <><span className="streak-live mr-1.5 inline-block h-2 w-2 rounded-full bg-mandarin align-middle" />Live · updates every few seconds</> : board?.phase === 'closed' ? 'Final standings' : 'Campus bounty'}
         </p>
         <h1 className="mt-1 text-[30px] leading-tight font-bold tracking-[-0.04em]">Jara Streak leaderboard 🏆</h1>
-        {board && <p className="mt-1 text-sm text-cream/80">{num(board.players)} player{board.players === 1 ? '' : 's'}{board.playingNow > 0 ? ` · ${board.playingNow} playing now` : ''} · Top {board.winners} win G$ {num(board.prizeGd)} each</p>}
+        {board && <p className="mt-1 text-sm text-cream/80">{num(board.players)} player{board.players === 1 ? '' : 's'}{board.playingNow > 0 ? ` · ${board.playingNow} playing now` : ''} · Top {board.winners} share G$ {num(board.prizePoolGd)}</p>}
         {board?.phase !== 'closed' && <Link href="/app/streak" className="app-button mt-4 w-full justify-center bg-mandarin text-white hover:bg-mandarin-deep min-h-12 text-sm">Play Jara Streak 🔥</Link>}
       </section>
       {error && !board && <p role="alert" className="rounded-xl bg-[#fde8e2] p-3 text-sm font-semibold text-[#8a2a12]">{error}</p>}
@@ -683,7 +741,7 @@ export function StreakLeaderboardPage() {
           )}
           <p className="mt-3 text-xs font-semibold text-ink/50">
             {board.phase === 'closed'
-              ? board.prizes.length ? (board.prizes.every((p) => p.paid) ? `🏆 Prizes sent: G$ ${num(board.prizes[0].amountGd)} to each winner’s wallet.` : 'Winners are confirmed. Prizes are on their way to their wallets.') : 'Final scores. Prizes go out shortly.'
+              ? board.prizes.length ? (`🏆 Winners confirmed: G$ ${num(board.prizes[0].amountGd)} each. ${board.prizes.every((p) => p.claimed) ? 'All prizes claimed.' : 'Winners: open Jara Streak to claim your prize.'}`) : 'Final scores. Prizes go out shortly.'
               : `Each player’s best run counts. 🔥 is their longest streak. Campuses add up their players’ best runs.`}
           </p>
         </section>
@@ -696,7 +754,7 @@ function InviteCard({ home }: { home: StreakHome }) {
   const [copied, setCopied] = useState(false)
   const r = home.runs
   if (!home.inviteLink) return null
-  const text = `Jara Streak 🔥 How many can you get right in a row? Top ${home.event.winners} win G$ ${num(home.event.prizeGd)} each. Join with my link: ${home.inviteLink}`
+  const text = `Jara Streak 🔥 How many can you get right in a row? The top ${home.event.winners} share a G$ ${num(home.event.prizePoolGd)} prize pool. Join with my link: ${home.inviteLink}`
   const maxed = r ? r.friendRuns >= r.maxFriendRuns : false
   return (
     <section className="app-card p-5 sm:p-6">
@@ -722,7 +780,7 @@ function Rules({ home }: { home: StreakHome }) {
     ['🔥', <>Combos: <b>5 in a row ×2</b>, 10 in a row ×3, 20 in a row ×4. Faster answers score more.</>],
     ['🎯', <><b>{event.runsPerDay} runs a day</b> (resets at midnight). Only your best run counts on the leaderboard.</>],
     ['⚡', <><b>Golden Hours</b>: surprise windows when every point counts double. Follow Jara’s socials so you don’t miss them.</>],
-    ['🏆', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the <b>top {event.winners}</b> each get <b>G$ {num(event.prizeGd)}</b>, sent straight to their wallet. Buy airtime or data in Jara, or cash out to your bank.</>],
+    ['🏆', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the <b>top {event.winners}</b> share the <b>G$ {num(event.prizePoolGd)} prize pool</b> equally: <b>G$ {num(event.prizeEachGd)} each</b>. Winners tap <b>Claim</b> and it goes to their wallet. Buy airtime or data in Jara, or cash out to your bank.</>],
   ]
   return (
     <section className="app-card p-5 sm:p-6">

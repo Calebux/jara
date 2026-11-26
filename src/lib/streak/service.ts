@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from 'node:crypto'
 import { parseEther, type Address } from 'viem'
-import { sendGdFromTreasury } from '../chain'
+import { gdBalance, sendGdFromStreakWallet, streakWalletAddress } from '../chain'
 import { atomic, run } from '../db'
 import { serverConfig } from '../env'
 import { withUserLock } from '../jars'
@@ -26,8 +26,10 @@ import { lagosDay, multiplier, points, questionMs } from './rules'
 // and sent to the player's verified wallet in one transfer when the run ends (never mid-run, so paying
 // never eats into the clock). Bounded by a bounty-wide pool and a per-player daily cap.
 //
-// When the bounty closes, the top STREAK_WINNERS are frozen once and each is sent STREAK_PRIZE_GD
-// straight to their verified wallet, exactly once. Everything players see is in G$.
+// When the bounty closes, the top STREAK_WINNERS are frozen once and share STREAK_PRIZE_POOL_GD
+// equally. Each winner claims their share; it goes to their verified wallet, exactly once. All G$
+// (prizes and per-answer) comes from the streak wallet (STREAK_WALLET_PRIVATE_KEY, else the
+// treasury). Everything players see is in G$.
 
 export class StreakError extends Error {
   constructor(message: string, readonly status = 400, readonly code?: string) { super(message) }
@@ -45,7 +47,7 @@ export function streakConfig() {
   const whole = (n: number) => Number.isSafeInteger(n) && n >= 0
   const problem = !s.startAt || !s.endAt ? 'STREAK_START_AT and STREAK_END_AT are not set'
     : s.endAt <= s.startAt ? 'STREAK_END_AT must be after STREAK_START_AT'
-    : !whole(s.prizeGd) ? 'STREAK_PRIZE_GD must be a whole number of G$'
+    : !whole(s.prizePoolGd) ? 'STREAK_PRIZE_POOL_GD must be a whole number of G$'
     : !whole(s.winners) || s.winners < 1 || s.winners > 20 ? 'STREAK_WINNERS must be 1–20'
     : !whole(s.runsPerDay) || s.runsPerDay < 1 ? 'STREAK_RUNS_PER_DAY must be at least 1'
     : !whole(s.runsPerFriend) || !whole(s.maxFriendRuns) ? 'STREAK_RUNS_PER_FRIEND and STREAK_MAX_FRIEND_RUNS must be whole numbers'
@@ -345,7 +347,8 @@ export async function leaderboard(viewer: User | null, limit = 20) {
     players,
     playingNow,
     winners: cfg.winners,
-    prizeGd: cfg.prizeGd,
+    prizePoolGd: cfg.prizePoolGd,
+    prizeEachGd: prizeEachGd(cfg),
     top: rows.map((x, i) => ({
       rank: i + 1,
       name: (x.name as string | null)?.trim().split(/\s+/).slice(0, 2).join(' ') || `Player ${short(String(x.root_address))}`,
@@ -358,7 +361,7 @@ export async function leaderboard(viewer: User | null, limit = 20) {
     })),
     you,
     campuses: campuses.map((c, i) => ({ rank: i + 1, campus: String(c.campus), score: Number(c.score), players: Number(c.players) })),
-    prizes: prizes.map((p) => ({ rank: Number(p.rank), amountGd: Number(p.amount_gd), paid: Boolean(p.paid_at) })),
+    prizes: prizes.map((p) => ({ rank: Number(p.rank), amountGd: Number(p.amount_gd), claimed: Boolean(p.paid_at) })),
   }
 }
 export type StreakBoard = Awaited<ReturnType<typeof leaderboard>>
@@ -372,13 +375,15 @@ export async function streakHome(user: User | null) {
   const player = root ? await getPlayer(cfg.eventId, root) : null
   const playedElsewhere = Boolean(player && player.user_id !== user!.id)
   const live = root && !playedElsewhere && phase === 'open' ? await activeRun(cfg, root) : null
+  if (phase === 'closed') await finalizeWinners().catch(() => undefined)
   return {
     event: {
       eventId: cfg.eventId,
       phase,
       startAt: cfg.configured ? cfg.startAt : null,
       endAt: cfg.configured ? cfg.endAt : null,
-      prizeGd: cfg.prizeGd,
+      prizePoolGd: cfg.prizePoolGd,
+      prizeEachGd: prizeEachGd(cfg),
       winners: cfg.winners,
       runsPerDay: cfg.runsPerDay,
       runsPerFriend: cfg.runsPerFriend,
@@ -403,6 +408,7 @@ export async function streakHome(user: User | null) {
     runs: user && connected && !playedElsewhere ? await allowance(user, cfg) : null,
     inviteLink: user ? `${serverConfig().appUrl}/app?ref=${await ensureRefCode(user)}` : null,
     run: live ? await runView(live.id) : null,
+    prize: playedElsewhere ? null : await prizeFor(user),
   }
 }
 export type StreakHome = Awaited<ReturnType<typeof streakHome>>
@@ -413,25 +419,27 @@ export function streakBanner() {
     const cfg = streakConfig()
     const phase = streakPhase(cfg)
     if (phase === 'off') return undefined
-    return { phase, startAt: cfg.startAt, endAt: cfg.endAt, prizeGd: cfg.prizeGd, winners: cfg.winners, perCorrectGd: answerGdOn(cfg) ? cfg.perCorrectGd : 0, golden: goldenState(cfg) }
+    return { phase, startAt: cfg.startAt, endAt: cfg.endAt, prizePoolGd: cfg.prizePoolGd, prizeEachGd: prizeEachGd(cfg), winners: cfg.winners, perCorrectGd: answerGdOn(cfg) ? cfg.perCorrectGd : 0, golden: goldenState(cfg) }
   } catch (err) {
     console.error('[streak] configuration error', err instanceof Error ? err.message : err)
     return undefined
   }
 }
 
+/** Each winner's share of the prize pool (G$ 100,000 shared by 3 → G$ 33,333 each). */
+export const prizeEachGd = (cfg: Config = streakConfig()) => Math.floor(cfg.prizePoolGd / cfg.winners)
+
 /**
- * After the bounty closes: freeze the winners (once) and send each their prize, once. Safe to call
- * again and again (the cron does): a paid prize is skipped, and a failed send retries the same
- * signed transaction.
+ * After the bounty closes: freeze the winners, once. The cron calls this every minute; the game page
+ * does too. Freezing sends nothing: each winner claims their prize themselves (claimPrize).
  */
-export async function payWinners() {
+export async function finalizeWinners() {
   const cfg = streakConfig()
   if (streakPhase(cfg) !== 'closed') return { eventId: cfg.eventId, status: 'not_closed' as const, prizes: [] }
-  if (cfg.prizeGd <= 0) return { eventId: cfg.eventId, status: 'no_prize' as const, prizes: [] }
+  if (cfg.prizePoolGd <= 0) return { eventId: cfg.eventId, status: 'no_prize' as const, prizes: [] }
   const frozen = Number((await run('SELECT COUNT(*) AS n FROM streak_prizes WHERE event_id = ?', [cfg.eventId])).rows[0].n) > 0
   if (!frozen) {
-    const amountGd = cfg.prizeGd
+    const amountGd = prizeEachGd(cfg)
     const top = (await run(`SELECT root_address, user_id, best_score FROM streak_players WHERE event_id = ? AND best_score > 0 ORDER BY ${ORDER} LIMIT ?`, [cfg.eventId, cfg.winners])).rows
     await atomic(async (tx) => {
       if (Number((await tx.execute({ sql: 'SELECT COUNT(*) AS n FROM streak_prizes WHERE event_id = ?', args: [cfg.eventId] })).rows[0].n) > 0) return
@@ -440,31 +448,46 @@ export async function payWinners() {
       }
     })
   }
-  const prizes: { rank: number; amountGd: number; status: 'paid' | 'retry' | 'no_user' }[] = []
-  for (const p of (await run('SELECT * FROM streak_prizes WHERE event_id = ? ORDER BY rank', [cfg.eventId])).rows) {
-    const rank = Number(p.rank), amountGd = Number(p.amount_gd)
-    if (p.paid_at) { prizes.push({ rank, amountGd, status: 'paid' }); continue }
-    const user = await getUserById(String(p.user_id))
-    if (!user) { prizes.push({ rank, amountGd, status: 'no_user' }); continue }
-    // Straight to the winner's own verified wallet (the one they played with), so they can cash out.
-    const to = String(p.root_address) as Address
-    const opId = `streak:${cfg.eventId}:prize:${rank}:${to}`
-    try {
-      const amount = parseEther(String(amountGd))
-      const hash = await sendGdFromTreasury(to, amount, opId)
-      await atomic(async (tx) => {
-        const paid = await tx.execute({ sql: 'UPDATE streak_prizes SET tx_hash = ?, paid_at = ? WHERE event_id = ? AND rank = ? AND paid_at IS NULL', args: [hash, Date.now(), cfg.eventId, rank] })
-        if (!paid.rowsAffected) return
-        await tx.execute({ sql: 'INSERT OR IGNORE INTO rewards_paid (user_id, reward_key, amount_gd, created_at) VALUES (?, ?, ?, ?)', args: [user.id, `streak:${cfg.eventId}:prize`, amountGd, Date.now()] })
-        await tx.execute({ sql: "INSERT OR IGNORE INTO activity (user_id, type, amount_wei, tx_hash, title, operation_id, created_at) VALUES (?, 'reward', ?, ?, ?, ?, ?)", args: [user.id, String(amount), hash, `🏆 Jara Streak: #${rank} on the leaderboard. G$ ${amountGd.toLocaleString('en-US')} sent to your wallet`, opId, Date.now()] })
-      })
-      prizes.push({ rank, amountGd, status: 'paid' })
-    } catch (err) {
-      console.error('[streak] prize payout deferred', opId, err instanceof Error ? err.message : 'error')
-      prizes.push({ rank, amountGd, status: 'retry' })
+  const prizes = (await run('SELECT rank, amount_gd, paid_at FROM streak_prizes WHERE event_id = ? ORDER BY rank', [cfg.eventId])).rows
+  return { eventId: cfg.eventId, status: 'frozen' as const, prizes: prizes.map((p) => ({ rank: Number(p.rank), amountGd: Number(p.amount_gd), claimed: Boolean(p.paid_at) })) }
+}
+
+/** This player's prize, if they won one. */
+async function prizeFor(user: User | null) {
+  if (!user?.rootAddress) return null
+  const p = (await run('SELECT * FROM streak_prizes WHERE event_id = ? AND root_address = ? AND user_id = ?', [streakConfig().eventId, user.rootAddress.toLowerCase(), user.id])).rows[0]
+  return p ? { rank: Number(p.rank), amountGd: Number(p.amount_gd), claimed: Boolean(p.paid_at), txHash: (p.tx_hash as string | null) ?? null } : null
+}
+
+/**
+ * A winner claims their prize: it is sent to the verified wallet they played with, exactly once
+ * (durable operation id; a retry replays the same transaction).
+ */
+export async function claimPrize(input: User) {
+  const cfg = streakConfig()
+  if (streakPhase(cfg) !== 'closed') throw new StreakError('Prizes can be claimed once Jara Streak ends.', 409, 'streak_open')
+  await finalizeWinners()
+  const user = await authorizedUser(input)
+  return withUserLock(user.id, async () => {
+    const prize = await prizeFor(user)
+    if (!prize) throw new StreakError('There is no prize to claim on this account.', 404, 'no_prize')
+    if (prize.claimed) return streakHome(user)
+    const to = user.rootAddress!.toLowerCase() as Address
+    const opId = `streak:${cfg.eventId}:prize:${prize.rank}:${to}`
+    const amount = parseEther(String(prize.amountGd))
+    let hash: string
+    try { hash = await sendGdFromStreakWallet(to, amount, opId) } catch (err) {
+      console.error('[streak] prize claim deferred', opId, err instanceof Error ? err.message : 'error')
+      throw new StreakError('Your prize could not be sent just now. Please tap Claim again in a minute; it will only ever be sent once.', 503, 'claim_retry')
     }
-  }
-  return { eventId: cfg.eventId, status: 'done' as const, prizes }
+    await atomic(async (tx) => {
+      const paid = await tx.execute({ sql: 'UPDATE streak_prizes SET tx_hash = ?, paid_at = ? WHERE event_id = ? AND rank = ? AND paid_at IS NULL', args: [hash, Date.now(), cfg.eventId, prize.rank] })
+      if (!paid.rowsAffected) return
+      await tx.execute({ sql: 'INSERT OR IGNORE INTO rewards_paid (user_id, reward_key, amount_gd, created_at) VALUES (?, ?, ?, ?)', args: [user.id, `streak:${cfg.eventId}:prize`, prize.amountGd, Date.now()] })
+      await tx.execute({ sql: "INSERT OR IGNORE INTO activity (user_id, type, amount_wei, tx_hash, title, operation_id, created_at) VALUES (?, 'reward', ?, ?, ?, ?, ?)", args: [user.id, String(amount), hash, `🏆 Jara Streak: #${prize.rank} on the leaderboard. G$ ${prize.amountGd.toLocaleString('en-US')} claimed to your wallet`, opId, Date.now()] })
+    })
+    return streakHome(user)
+  }, { waitMs: 15_000 })
 }
 
 /**
@@ -481,7 +504,7 @@ export async function payRunEarnings(runId: string): Promise<'paid' | 'none' | '
   const to = r.root_address as Address
   try {
     const amount = parseEther(String(earned))
-    const hash = await sendGdFromTreasury(to, amount, opId)
+    const hash = await sendGdFromStreakWallet(to, amount, opId)
     const correct = Number((await run('SELECT COUNT(*) AS n FROM streak_answers WHERE run_id = ? AND gd > 0', [r.id])).rows[0].n)
     await atomic(async (tx) => {
       const paid = await tx.execute({ sql: 'UPDATE streak_runs SET paid_at = ?, tx_hash = ? WHERE id = ? AND paid_at IS NULL', args: [Date.now(), hash, r.id] })
@@ -529,9 +552,11 @@ export async function streakReport() {
   const top = (await run(`SELECT p.root_address, u.name, p.campus, p.best_score, p.best_streak, p.runs,
       (SELECT COALESCE(SUM(earned_gd), 0) FROM streak_runs r WHERE r.event_id = p.event_id AND r.root_address = p.root_address) AS earned_gd
     FROM streak_players p JOIN users u ON u.id = p.user_id WHERE p.event_id = ? ORDER BY p.best_score DESC, p.best_at ASC LIMIT 100`, [cfg.eventId])).rows
-  const prizes = (await run('SELECT rank, root_address, score, amount_gd, tx_hash, paid_at FROM streak_prizes WHERE event_id = ? ORDER BY rank', [cfg.eventId])).rows
+  const prizes = (await run('SELECT rank, root_address, user_id, score, amount_gd, tx_hash, paid_at AS claimed_at FROM streak_prizes WHERE event_id = ? ORDER BY rank', [cfg.eventId])).rows
+  const wallet = await (async () => { const address = streakWalletAddress(); return { address, gd: Number(await gdBalance(address)) / 1e18 } })().catch(() => null)
   return {
-    eventId: cfg.eventId, phase: streakPhase(cfg), problem: cfg.problem,
+    eventId: cfg.eventId, phase: streakPhase(cfg), problem: cfg.problem, wallet,
+    prizePool: { totalGd: cfg.prizePoolGd, eachGd: prizeEachGd(cfg), winners: cfg.winners },
     players: { joined: Number(players.joined), played: Number(players.played), runs: Number(players.runs), longestStreak: Number(players.longest) },
     answers: { answered: Number(answers.answered), correct: Number(answers.correct) },
     answerGd: { perCorrect: cfg.perCorrectGd, poolCap: cfg.poolCapGd, dailyCap: cfg.dailyCapGd, earned: Number(gd.earned), sent: Number(gd.sent), runsWaiting: Number(gd.runs_waiting), poolLeft: Math.max(0, cfg.poolCapGd - Number(gd.earned)) },

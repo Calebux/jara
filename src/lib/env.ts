@@ -160,8 +160,10 @@ export function serverConfig() {
       endAt: time('STREAK_END_AT'),
       // Friends who join from this moment earn extra runs (defaults to the start).
       invitesFrom: time('STREAK_INVITES_FROM'),
-      // Each winner gets this much G$ (G$ 32,000 is about ₦5,000 at ₦0.156 per G$, Nov 2026).
-      prizeGd: num('STREAK_PRIZE_GD', 32000),
+      // The prize pool, shared equally by the top STREAK_WINNERS (G$ 100,000 → G$ 33,333 each).
+      prizePoolGd: num('STREAK_PRIZE_POOL_GD', 100000),
+      // The wallet that pays prizes and per-answer G$. Unset: the treasury.
+      walletKey: (process.env.STREAK_WALLET_PRIVATE_KEY || undefined) as `0x${string}` | undefined,
       winners: num('STREAK_WINNERS', 3),
       // G$ for every correct answer, sent to the player's wallet after each run. Stops when the
       // whole bounty has paid STREAK_POOL_CAP_GD (0 turns per-answer G$ off), and each player earns
@@ -228,7 +230,7 @@ export function demoFundsAllowed(): boolean {
 export function assertSafeRuntime() {
   const cfg = serverConfig()
   if (cfg.moneyProblem) throw new Error(cfg.moneyProblem)
-  if (cfg.chain.mode === 'mock' && (falconKeyLive() || (vtpassLive() && cfg.vtpass.apiKey) || cfg.chain.treasuryKey || process.env.TELEMETRY_REPORTER_KEY || process.env.DAILY_CHALLENGE_SIGNER_KEY)) {
+  if (cfg.chain.mode === 'mock' && (falconKeyLive() || (vtpassLive() && cfg.vtpass.apiKey) || cfg.chain.treasuryKey || cfg.streak.walletKey || process.env.TELEMETRY_REPORTER_KEY || process.env.DAILY_CHALLENGE_SIGNER_KEY)) {
     throw new Error('Demo deployments must not contain live provider or treasury signing credentials.')
   }
   if (cfg.chain.mode === 'celo' && cfg.custody.provider === 'local' && !/^[0-9a-f]{64}$/i.test(cfg.walletSecret)) {
