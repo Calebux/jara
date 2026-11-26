@@ -1,75 +1,53 @@
-import { TEST_WALLET, isGoodCashError, type Quote } from '@goodcash/sdk'
-import type { Address, Hex } from 'viem'
+import { parseEther, type Address } from 'viem'
 import * as chain from './chain'
-import { TransferPendingError, TransferRevertedError, hasSubmittedTransaction } from './chain-outbox'
+import { TransferPendingError, TransferRevertedError } from './chain-outbox'
 import { atomic, run } from './db'
 import { serverConfig } from './env'
-import * as gc from './goodcash-client'
 import { ngnPerGd } from './price'
-import { withUserLock } from './jars'
-import { getUserById, type User } from './users'
-import { authorizedUser } from './wallet-authorization'
+import { type User } from './users'
 
-// Invite milestone rewards, paid in naira straight to the person's bank.
+// Referral milestones, paid automatically.
 //
-// Every REFERRAL_MILESTONE_FRIENDS verified friends (10 by default) earns a G$ reward worth
-// REFERRAL_MILESTONE_NGN naira at today's G$ price. The amount is fixed when they cash out. GoodCash
-// turns that G$ into naira in their bank (its fees come out of it, shown before they confirm).
-// The person only picks their bank and types their account number; Jara's treasury pays the G$ to
-// GoodCash from the server, so they sign nothing, need no wallet open and pay no network fee.
+// Every REFERRAL_MILESTONE_FRIENDS verified friends (10 by default: 10, 20, 30…) earns G$ worth
+// REFERRAL_MILESTONE_NGN naira (₦5,000) at the G$ price of the moment it is earned. Jara sends it
+// from the referral wallet (REFERRAL_WALLET_PRIVATE_KEY, funded separately, so its balance is the
+// program's budget) straight to the person's own verified GoodDollar wallet. Nobody does anything by
+// hand. They can then spend it in Jara or cash it out to naira with GoodCash.
 //
 // Friends are counted from referral_identities: one row per verified GoodDollar identity, app wide,
 // so extra accounts of the same person never count twice.
 //
-// Money safety:
-// - One row per milestone. A new attempt is only made after GoodCash says the earlier one failed,
-//   expired or was refunded, or when nothing was ever sent.
-// - GoodCash's transaction is checked (assertSafeTransaction) before the treasury signs it.
-// - The treasury transaction is durable (chain_transactions): a retry replays the same signed bytes.
+// Never twice: one row per milestone, with its G$ amount and wallet fixed when the row is created,
+// and the transfer is durable under `referral-milestone:<account>:<milestone>` (a retry replays the
+// same signed transaction). Rows marked 'manual' were paid before this existed (referralStartingLine).
 
-export class ReferralPayoutError extends Error {
-  constructor(message: string, readonly status = 400) { super(message) }
-}
-
-type Status = 'preparing' | 'sending' | 'sent' | 'paid' | 'failed' | 'manual'
+type Status = 'sending' | 'paid' | 'manual'
 
 interface PayoutRow {
   user_id: string
   milestone: number
-  attempt: number
   status: Status
   amount_ngn: number
   amount_g: string | null
-  fee_percent: number | null
-  bank_code: string | null
-  bank_name: string | null
-  account_number: string | null
-  account_name: string | null
-  cashout_id: string | null
-  tx_to: string | null
-  tx_data: string | null
-  expires_at: number | null
+  to_address: string | null
   tx_hash: string | null
-  receive_naira: number | null
   error: string | null
+  updated_at: number
 }
 
 export function milestoneConfig() {
   const { friends, ngn } = serverConfig().referralMilestone
-  const goodcash = serverConfig().goodcash.secretKey.startsWith('gc_sk_')
-  return { friends: Math.max(1, Math.floor(friends)), ngn: Math.max(0, Math.floor(ngn)), enabled: ngn > 0 && goodcash }
+  return { friends: Math.max(1, Math.floor(friends)), ngn: Math.max(0, Math.floor(ngn)), enabled: ngn > 0 && chain.referralWalletConfigured() }
 }
 
-/** The G$ reward worth `ngn` naira at today's price, rounded to the nearest G$ 100. */
+/** The G$ worth `ngn` naira at today's price, rounded to the nearest G$ 100. */
 async function rewardGdFor(ngn: number): Promise<number> {
   const rate = await ngnPerGd()
   if (!(rate > 0)) throw new Error('no G$ price')
   return Math.max(100, Math.round(ngn / rate / 100) * 100)
 }
 
-const opId = (r: Pick<PayoutRow, 'user_id' | 'milestone' | 'attempt'>) => `goodcash:referral:${r.user_id}:${r.milestone}:${r.attempt}`
-const idempotencyKey = (r: Pick<PayoutRow, 'user_id' | 'milestone' | 'attempt'>) => `jara-referral-${r.user_id}-${r.milestone}-${r.attempt}`
-const isTestKey = () => serverConfig().goodcash.secretKey.startsWith('gc_sk_test_')
+const opId = (userId: string, milestone: number) => `referral-milestone:${userId}:${milestone}`
 
 async function verifiedFriends(userId: string): Promise<number> {
   return Number((await run('SELECT COUNT(*) AS n FROM referral_identities WHERE referrer_id = ?', [userId])).rows[0].n)
@@ -79,271 +57,98 @@ async function rows(userId: string): Promise<PayoutRow[]> {
   return (await run('SELECT * FROM referral_payouts WHERE user_id = ? ORDER BY milestone', [userId])).rows as unknown as PayoutRow[]
 }
 
-async function row(userId: string, milestone: number): Promise<PayoutRow | null> {
-  return ((await run('SELECT * FROM referral_payouts WHERE user_id = ? AND milestone = ?', [userId, milestone])).rows[0] as unknown as PayoutRow) ?? null
-}
-
-async function save(r: PayoutRow, patch: Partial<PayoutRow>) {
-  const keys = Object.keys(patch) as (keyof PayoutRow)[]
-  await run(`UPDATE referral_payouts SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE user_id = ? AND milestone = ?`,
-    [...keys.map((k) => (patch[k] ?? null) as string | number | null), Date.now(), r.user_id, r.milestone])
-  Object.assign(r, patch)
-}
-
-const inFlight = (r: PayoutRow) => r.status === 'preparing' || r.status === 'sending' || r.status === 'sent'
-
-/** What the Rewards screen shows. Database reads only. */
+/** What the Rewards screen shows. Reads only (plus today's G$ price). */
 export async function referralRewardState(user: User) {
   const cfg = milestoneConfig()
   const friends = await verifiedFriends(user.id)
-  const earned = Math.floor(friends / cfg.friends)
   const list = await rows(user.id)
-  const byMilestone = new Map(list.map((r) => [Number(r.milestone), r]))
-  const current = list.find(inFlight) ?? null
-  let ready: number | null = null
-  if (!current) for (let m = 1; m <= earned; m++) {
-    const r = byMilestone.get(m)
-    if (!r || r.status === 'failed') { ready = m; break }
-  }
   const view = (r: PayoutRow) => ({
     milestone: Number(r.milestone),
+    friends: Number(r.milestone) * cfg.friends,
     amountGd: r.amount_g == null ? null : Number(r.amount_g),
-    status: r.status === 'preparing' || r.status === 'sending' || r.status === 'sent' ? 'processing' as const : r.status,
     amountNgn: Number(r.amount_ngn),
-    receiveNaira: r.receive_naira == null ? null : Number(r.receive_naira),
-    bankName: r.bank_name,
-    accountEnding: r.account_number ? r.account_number.slice(-4) : null,
-    accountName: r.account_name,
-    error: r.status === 'failed' ? r.error : null,
+    at: Number(r.updated_at),
   })
   return {
     enabled: cfg.enabled,
     friendsPerReward: cfg.friends,
-    /** The naira value of the reward; it is paid in G$. */
+    /** The naira value of each reward; it is paid in G$. */
     rewardNgn: cfg.ngn,
-    /** Today's G$ for the reward (null if the price is unavailable). Fixed when they cash out. */
+    /** Today's G$ for the next reward (null if the price is unavailable). */
     rewardGd: cfg.enabled ? await rewardGdFor(cfg.ngn).catch(() => null) : null,
     verifiedFriends: friends,
     /** Friends counted toward the next reward. */
-    towardNext: friends - earned * cfg.friends,
-    ready: cfg.enabled ? ready : null,
-    processing: current ? view(current) : null,
-    paid: list.filter((r) => r.status === 'paid' || r.status === 'manual').map(view),
-    lastFailed: ready && byMilestone.get(ready)?.status === 'failed' ? view(byMilestone.get(ready)!) : null,
+    towardNext: friends % cfg.friends,
+    /** Rewards on their way to the wallet right now. */
+    sending: list.filter((r) => r.status === 'sending').map(view),
+    /** Rewards Jara sent to the wallet, oldest first. */
+    sent: list.filter((r) => r.status === 'paid').map(view),
+    /** Earlier rewards, paid before this existed. */
+    earlier: list.filter((r) => r.status === 'manual').length,
+    /** When this was read, so the screen can tell whether the latest reward is still news. */
+    now: Date.now(),
   }
 }
 export type ReferralRewardState = Awaited<ReturnType<typeof referralRewardState>>
 
-function cleanAccount(input: { bankCode?: unknown; accountNumber?: unknown }) {
-  const bankCode = typeof input.bankCode === 'string' ? input.bankCode.trim() : ''
-  const accountNumber = typeof input.accountNumber === 'string' ? input.accountNumber.replace(/\D/g, '') : ''
-  if (!bankCode || bankCode.length > 20) throw new ReferralPayoutError('Choose your bank.')
-  if (accountNumber.length !== 10) throw new ReferralPayoutError('Enter your 10-digit account number.')
-  return { bankCode, accountNumber }
-}
-
-function friendly(err: unknown, fallback: string): string {
-  if (err instanceof ReferralPayoutError) return err.message
-  if (isGoodCashError(err)) {
-    if (err.code === 'bank_account_not_found') return 'We couldn’t find that account. Check the bank and the 10 digits.'
-    if (err.code === 'cashout_paused' || err.code === 'unavailable' || err.code === 'network_error' || err.code === 'rate_limited') return 'Bank payouts are busy right now. Please try again in a few minutes.'
-    if (err.code === 'insufficient_balance' || err.code === 'needs_network_fee') return 'Your reward is being prepared. Please try again in a little while.'
-  }
-  return fallback
-}
-
-/** The account holder's name, so the person can confirm it is theirs before anything is sent. */
-export async function verifyPayoutAccount(input: { bankCode?: unknown; accountNumber?: unknown }) {
-  const account = cleanAccount(input)
-  try {
-    const { accountName } = await gc.goodCashServer().verifyAccount(account)
-    return { accountName }
-  } catch (err) {
-    throw new ReferralPayoutError(friendly(err, 'We couldn’t check that account right now. Please try again.'), 400)
-  }
-}
-
-/** What cashing out today's reward pays into the bank, after GoodCash's fees. */
-async function priceReward(ngn: number): Promise<{ amountG: number; quote: Quote }> {
-  const amountG = await rewardGdFor(ngn)
-  return { amountG, quote: await gc.goodCashServer().quote({ amountG }) }
-}
-
-/** For the cash-out sheet: the G$ reward and what reaches the bank, with every fee. */
-export async function previewReferralPayout(user: User) {
+/**
+ * Send every milestone this person has reached and not yet been paid for. Call with the account lock
+ * held and an authorized (verified) user. Returns the rewards sent now.
+ */
+export async function payReferralMilestones(user: User): Promise<{ friends: number; amountGd: number }[]> {
   const cfg = milestoneConfig()
-  const state = await referralRewardState(user)
-  if (!cfg.enabled || !state.ready) throw new ReferralPayoutError('No reward is ready to cash out yet.', 409)
-  try {
-    const { amountG, quote } = await priceReward(cfg.ngn)
-    return { amountGd: amountG, receiveNaira: quote.receive.naira, fees: (quote.fees ?? []).map((f) => ({ label: f.label, naira: f.naira ?? null })) }
-  } catch (err) {
-    throw new ReferralPayoutError(friendly(err, 'We couldn’t get today’s G$ price. Please try again in a minute.'), 503)
-  }
-}
-
-/**
- * Start (or resume) the bank payout for the next earned milestone. Safe to call again with the
- * same details at any point: it carries on from where the last call stopped.
- */
-export async function claimReferralReward(input: User, details: { bankCode?: unknown; accountNumber?: unknown }) {
-  return withUserLock(input.id, async () => {
-    const cfg = milestoneConfig()
-    if (!cfg.enabled) throw new ReferralPayoutError('Invite rewards are not switched on yet.', 409)
-    const user = await authorizedUser(input)
-    const state = await referralRewardState(user)
-    if (state.processing) {
-      await advance(user, (await rows(user.id)).find(inFlight)!)
-      return referralRewardState(user)
+  if (!cfg.enabled || !user.rootAddress) return []
+  const earned = Math.floor((await verifiedFriends(user.id)) / cfg.friends)
+  const have = new Map((await rows(user.id)).map((r) => [Number(r.milestone), r]))
+  const paid: { friends: number; amountGd: number }[] = []
+  for (let m = 1; m <= earned; m++) {
+    let r = have.get(m)
+    if (r?.status === 'paid' || r?.status === 'manual') continue
+    if (!r) {
+      let amountGd: number
+      try { amountGd = await rewardGdFor(cfg.ngn) } catch { console.warn('[referral] no G$ price, will retry'); break }
+      const now = Date.now()
+      // Fixed here: every retry sends exactly this amount to exactly this wallet.
+      await run(`INSERT OR IGNORE INTO referral_payouts (user_id, milestone, status, amount_ngn, amount_g, to_address, created_at, updated_at) VALUES (?, ?, 'sending', ?, ?, ?, ?, ?)`,
+        [user.id, m, cfg.ngn, String(amountGd), user.rootAddress.toLowerCase(), now, now])
+      r = (await run('SELECT * FROM referral_payouts WHERE user_id = ? AND milestone = ?', [user.id, m])).rows[0] as unknown as PayoutRow
+      if (r.status !== 'sending') continue
     }
-    if (!state.ready) throw new ReferralPayoutError(`Your next reward unlocks at ${cfg.friends * (Math.floor(state.verifiedFriends / cfg.friends) + 1)} verified friends.`, 409)
-    if (!isTestKey() && serverConfig().chain.mode === 'mock') throw new ReferralPayoutError('Live bank payouts need CHAIN_MODE=celo.', 409)
-
-    const account = cleanAccount(details)
-    const { accountName } = await verifyPayoutAccount(account)
-    const bank = (await gc.goodCashBanks().catch(() => [])).find((b) => b.code === account.bankCode)
-    let priced: Awaited<ReturnType<typeof priceReward>>
-    try { priced = await priceReward(cfg.ngn) } catch (err) { throw new ReferralPayoutError(friendly(err, 'We couldn’t get today’s G$ price. Please try again in a minute.'), 503) }
-
-    const prior = await row(user.id, state.ready)
-    const now = Date.now()
-    const fields = {
-      status: 'preparing' as Status, amount_ngn: cfg.ngn, amount_g: String(priced.amountG), fee_percent: priced.quote.feePercent,
-      bank_code: account.bankCode, bank_name: bank?.name ?? null, account_number: account.accountNumber, account_name: accountName,
-      cashout_id: null, tx_to: null, tx_data: null, expires_at: null, tx_hash: null, receive_naira: null, error: null,
-    }
-    if (prior) {
-      // Only a payout proven unpaid ends in 'failed'; the next attempt gets new identifiers.
-      await run("UPDATE referral_payouts SET attempt = attempt + 1, updated_at = ? WHERE user_id = ? AND milestone = ? AND status = 'failed'", [now, user.id, state.ready])
-      const r = (await row(user.id, state.ready))!
-      await save(r, fields)
-      await advance(user, r)
-    } else {
-      await run(`INSERT INTO referral_payouts (user_id, milestone, attempt, status, amount_ngn, created_at, updated_at) VALUES (?, ?, 1, 'preparing', ?, ?, ?)`, [user.id, state.ready, cfg.ngn, now, now])
-      const r = (await row(user.id, state.ready))!
-      await save(r, fields)
-      await advance(user, r)
-    }
-    return referralRewardState(user)
-  })
-}
-
-/** Move one payout forward as far as it can go right now. Never sends twice. */
-async function advance(user: User, r: PayoutRow): Promise<void> {
-  const client = gc.goodCashServer()
-  const test = isTestKey()
-
-  if (r.status === 'preparing') {
+    const id = opId(user.id, m)
+    const amount = parseEther(String(r.amount_g))
+    let hash: string
     try {
-      const created = await client.createCashOut({
-        wallet: test ? TEST_WALLET : chain.treasuryAddress(),
-        amountG: r.amount_g!,
-        recipient: { bankCode: r.bank_code!, accountNumber: r.account_number!, accountName: r.account_name! },
-        feePercentShown: Number(r.fee_percent),
-        partnerRef: user.id,
-        idempotencyKey: idempotencyKey(r),
-      })
-      // The check before the treasury signs anything: exactly this cash out, to GoodCash's router.
-      client.assertSafeTransaction(created, { amountG: r.amount_g! })
-      await save(r, { status: 'sending', cashout_id: created.id, tx_to: created.transaction.to, tx_data: created.transaction.data, expires_at: Date.parse(created.expiresAt) || null, receive_naira: created.receive.naira })
+      hash = await chain.sendGdFromReferralWallet(r.to_address as Address, amount, id)
     } catch (err) {
-      // Nothing has been sent: safe to let the person try again.
-      console.error('[referral-payout] could not create cash out', isGoodCashError(err) ? err.code : err instanceof Error ? err.message : 'error')
-      await save(r, { status: 'failed', error: friendly(err, 'The payout could not start. Nothing was sent. Please try again.') })
-      return
+      // Pending: the same signed transaction is settled on the next run. Anything else (for example
+      // the referral wallet is out of G$ or CELO): nothing was sent; try again on the next run.
+      const why = err instanceof TransferPendingError ? 'Waiting for the network to confirm.'
+        : err instanceof TransferRevertedError ? 'The transfer did not go through. Retrying.'
+        : 'The referral wallet could not send yet (check its G$ and CELO). Retrying.'
+      if (!(err instanceof TransferPendingError)) console.error('[referral] milestone payout deferred', id, err instanceof Error ? err.message : 'error')
+      await run('UPDATE referral_payouts SET error = ?, updated_at = ? WHERE user_id = ? AND milestone = ?', [why, Date.now(), user.id, m])
+      break
     }
-  }
-
-  if (r.status === 'sending') {
-    if (test) {
-      // Test keys: GoodCash simulates the payment; no wallet or chain is touched.
-      await client.simulate(r.cashout_id!).catch(() => undefined)
-      await save(r, { status: 'sent' })
-    } else {
-      const id = opId(r)
-      if (!(await hasSubmittedTransaction(id)) && r.expires_at && Date.now() > r.expires_at - 60_000) {
-        await save(r, { status: 'failed', error: 'That payout took too long to start. Nothing was sent. Please try again.' })
-        return
-      }
-      try {
-        const hash = await chain.sendTreasuryCall({ to: r.tx_to as Address, data: r.tx_data as Hex }, id)
-        await save(r, { status: 'sent', tx_hash: hash })
-      } catch (err) {
-        if (err instanceof TransferRevertedError) { await save(r, { status: 'failed', error: 'The payout did not go through. Nothing was paid. Please try again.' }); return }
-        if (err instanceof TransferPendingError) return // the same signed transaction is confirmed on the next check
-        console.error('[referral-payout] treasury send failed', err instanceof Error ? err.message : 'error')
-        if (!(await hasSubmittedTransaction(id))) await save(r, { status: 'failed', error: 'Your reward is being prepared. Please try again in a little while.' })
-        return
-      }
-      await client.reportTransaction(r.cashout_id!, r.tx_hash!).catch(() => undefined)
-    }
-  }
-
-  if (r.status === 'sent') {
-    const c = await client.getCashOut(r.cashout_id!).catch(() => null)
-    if (!c) return
-    if (c.status === 'awaiting_signature' && r.tx_hash) await client.reportTransaction(r.cashout_id!, r.tx_hash).catch(() => undefined)
-    else if (c.status === 'paid') await markPaid(r, c.receive.naira)
-    else if (c.status === 'failed' || c.status === 'refunded' || c.status === 'expired') await markFailed(r, c.status)
-  }
-}
-
-async function markPaid(r: PayoutRow, naira: number | null) {
-  const received = naira ?? r.receive_naira ?? r.amount_ngn
-  await atomic(async (tx) => {
-    const done = await tx.execute({ sql: "UPDATE referral_payouts SET status = 'paid', receive_naira = ?, updated_at = ? WHERE user_id = ? AND milestone = ? AND status IN ('sending', 'sent')", args: [received, Date.now(), r.user_id, r.milestone] })
-    if (!done.rowsAffected) return
-    await tx.execute({
-      sql: `INSERT OR IGNORE INTO activity (user_id, type, amount_ngn, status, title, detail, provider, provider_ref, tx_hash, operation_id, created_at)
-            VALUES (?, 'cashout', ?, 'done', ?, ?, 'goodcash', ?, ?, ?, ?)`,
-      args: [r.user_id, received, `Invite reward cashed out · ₦${Number(received).toLocaleString('en-NG')}`, `G$ ${Number(r.amount_g ?? 0).toLocaleString('en-US')} to ${r.bank_name ?? 'your bank'} ••${(r.account_number ?? '').slice(-4)} via GoodCash`, r.cashout_id, r.tx_hash, `goodcash:referral:${r.user_id}:${r.milestone}`, Date.now()],
+    const gd = Number(r.amount_g)
+    const ngn = Number(r.amount_ngn)
+    await atomic(async (tx) => {
+      const done = await tx.execute({ sql: "UPDATE referral_payouts SET status = 'paid', tx_hash = ?, error = NULL, updated_at = ? WHERE user_id = ? AND milestone = ? AND status = 'sending'", args: [hash, Date.now(), user.id, m] })
+      if (!done.rowsAffected) return
+      await tx.execute({ sql: 'INSERT OR IGNORE INTO rewards_paid (user_id, reward_key, amount_gd, created_at) VALUES (?, ?, ?, ?)', args: [user.id, `milestone-referral-${m}`, gd, Date.now()] })
+      await tx.execute({
+        sql: "INSERT OR IGNORE INTO activity (user_id, type, amount_wei, tx_hash, title, operation_id, created_at) VALUES (?, 'reward', ?, ?, ?, ?, ?)",
+        args: [user.id, String(amount), hash, `🎉 ${m * cfg.friends} friends invited: G$ ${gd.toLocaleString('en-US')} (≈ ₦${ngn.toLocaleString('en-NG')}) sent to your wallet`, id, Date.now()],
+      })
     })
-  })
-  r.status = 'paid'
-}
-
-async function markFailed(r: PayoutRow, why: string) {
-  await run("UPDATE referral_payouts SET status = 'failed', error = ?, updated_at = ? WHERE user_id = ? AND milestone = ? AND status IN ('sending', 'sent')",
-    [why === 'refunded' || why === 'expired' ? 'The bank payout didn’t complete, so nothing was paid. Please try again.' : 'The bank declined the payout. Check your account details and try again.', Date.now(), r.user_id, r.milestone])
-  r.status = 'failed'
-}
-
-/** Carry an in-flight payout forward (opening the Rewards screen, or the hourly job). */
-export async function refreshReferralPayout(user: User) {
-  const current = (await rows(user.id)).find(inFlight)
-  if (!current || !milestoneConfig().enabled) return
-  await withUserLock(user.id, () => advance(user, current), { waitMs: 5_000 }).catch((err) => console.warn('[referral-payout] refresh deferred', err instanceof Error ? err.message : 'error'))
-}
-
-/** Every in-flight payout, for the cron job. */
-export async function refreshAllReferralPayouts() {
-  const pending = (await run("SELECT DISTINCT user_id FROM referral_payouts WHERE status IN ('preparing', 'sending', 'sent')")).rows
-  for (const p of pending) {
-    const user = await getUserById(String(p.user_id))
-    if (user) await refreshReferralPayout(user)
+    paid.push({ friends: m * cfg.friends, amountGd: gd })
   }
-  return pending.length
+  return paid
 }
 
-/** GoodCash webhook for a payout Jara itself made. Returns false if the cash out is not one of ours. */
-export async function handleReferralPayoutEvent(type: string, data: { id?: string; receive?: { naira?: number } }): Promise<boolean> {
-  if (!data.id) return false
-  const r = (await run('SELECT * FROM referral_payouts WHERE cashout_id = ?', [data.id])).rows[0] as unknown as PayoutRow | undefined
-  if (!r) return false
-  if (type === 'cashout.paid') await markPaid(r, data.receive?.naira ?? null)
-  else if (type === 'cashout.failed' || type === 'cashout.refunded' || type === 'cashout.expired') await markFailed(r, type.split('.')[1])
-  return true
-}
-
-/**
- * Admin: record a milestone already paid outside Jara (for example by bank transfer before this
- * feature), so it is never paid again.
- */
-export async function markMilestonePaidManually(userId: string, milestone: number, note: string) {
-  if (!Number.isSafeInteger(milestone) || milestone < 1) throw new ReferralPayoutError('milestone must be 1 or more')
-  const now = Date.now()
-  const r = await run(`INSERT INTO referral_payouts (user_id, milestone, attempt, status, amount_ngn, error, created_at, updated_at) VALUES (?, ?, 1, 'manual', ?, ?, ?, ?)
-    ON CONFLICT (user_id, milestone) DO UPDATE SET status = 'manual', error = excluded.error, updated_at = excluded.updated_at WHERE referral_payouts.status = 'failed'`,
-  [userId, milestone, milestoneConfig().ngn, note.slice(0, 200), now, now])
-  return { recorded: r.rowsAffected > 0 }
+/** Admin: the referral wallet's balance and every milestone payout, newest first. */
+export async function referralPayoutReport() {
+  const payouts = (await run(`SELECT p.user_id, u.name, p.to_address, p.milestone, p.status, p.amount_ngn, p.amount_g, p.tx_hash, p.error, p.updated_at
+    FROM referral_payouts p JOIN users u ON u.id = p.user_id WHERE p.status != 'manual' ORDER BY p.updated_at DESC LIMIT 200`)).rows
+  const totals = (await run("SELECT COALESCE(SUM(CAST(amount_g AS REAL)), 0) AS gd, COUNT(*) AS n FROM referral_payouts WHERE status = 'paid'")).rows[0]
+  return { wallet: await chain.referralWalletBalances().catch(() => null), paidGd: Number(totals.gd), paidCount: Number(totals.n), payouts }
 }

@@ -66,32 +66,21 @@ const SCHEMA = [
     pending_action TEXT,
     created_at INTEGER NOT NULL
   )`,
-  // Invite-milestone rewards paid to a bank through GoodCash, from the Jara treasury. One row per
-  // milestone (10 friends = 1, 20 = 2…). A new attempt only follows a payout proven not to have paid.
+  // Invite-milestone rewards: G$ sent automatically from the referral wallet to the person's own
+  // wallet, once per milestone (10 friends = 1, 20 = 2…). 'manual' = paid before this existed.
   `CREATE TABLE IF NOT EXISTS referral_payouts (
     user_id TEXT NOT NULL REFERENCES users (id),
     milestone INTEGER NOT NULL,
-    attempt INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL,
     amount_ngn INTEGER NOT NULL,
     amount_g TEXT,
-    fee_percent REAL,
-    bank_code TEXT,
-    bank_name TEXT,
-    account_number TEXT,
-    account_name TEXT,
-    cashout_id TEXT,
-    tx_to TEXT,
-    tx_data TEXT,
-    expires_at INTEGER,
+    to_address TEXT,
     tx_hash TEXT,
-    receive_naira INTEGER,
     error TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, milestone)
   )`,
-  'CREATE INDEX IF NOT EXISTS referral_payouts_cashout_idx ON referral_payouts (cashout_id)',
   // One-time steps that must never run twice (by name).
   'CREATE TABLE IF NOT EXISTS app_flags (name TEXT PRIMARY KEY, at INTEGER NOT NULL)',
   `CREATE TABLE IF NOT EXISTS jars (
@@ -407,8 +396,8 @@ export async function referralStartingLine(client: Client, flag = 'referral_mile
   const writes: { sql: string; args: (string | number)[] }[] = []
   for (const c of counts) {
     for (let m = 1; m <= Math.floor(Number(c.n) / per); m++) {
-      writes.push({ sql: `INSERT OR IGNORE INTO referral_payouts (user_id, milestone, attempt, status, amount_ngn, error, created_at, updated_at)
-        VALUES (?, ?, 1, 'manual', 0, 'Paid before invite rewards moved into Jara', ?, ?)`, args: [String(c.referrer_id), m, now, now] })
+      writes.push({ sql: `INSERT OR IGNORE INTO referral_payouts (user_id, milestone, status, amount_ngn, error, created_at, updated_at)
+        VALUES (?, ?, 'manual', 0, 'Paid before invite rewards moved into Jara', ?, ?)`, args: [String(c.referrer_id), m, now, now] })
     }
   }
   writes.push({ sql: 'INSERT OR IGNORE INTO app_flags (name, at) VALUES (?, ?)', args: [flag, now] })

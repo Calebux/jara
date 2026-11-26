@@ -395,13 +395,34 @@ export async function verifySpendingContract(): Promise<Address> {
   return address
 }
 
-/**
- * One checked contract call from the treasury (a GoodCash cash out). Durable under `operationId`:
- * a retry replays the same signed bytes, never a second transaction.
- */
-export async function sendTreasuryCall(call: { to: Address; data: Hex }, operationId: string): Promise<Hash> {
-  if (isMock()) throw new Error('Treasury calls need CHAIN_MODE=celo.')
-  return (await durableTransaction(operationId, treasuryKey(), { to: call.to, data: call.data })).hash
+// ---------- referral wallet ----------
+// A separate wallet that only pays referral rewards, so its balance is the program's budget.
+
+export function referralWalletConfigured(): boolean {
+  return isMock() || Boolean(serverConfig().referralMilestone.walletKey)
+}
+
+export function referralWalletAddress(): Address | null {
+  if (isMock()) return '0x000000000000000000000000000000000000bEEF'
+  const key = serverConfig().referralMilestone.walletKey
+  return key ? privateKeyToAccount(key).address : null
+}
+
+/** Pay a referral reward from the referral wallet. Durable under `operationId`: a retry never pays twice. */
+export async function sendGdFromReferralWallet(to: Address, amount: bigint, operationId: string): Promise<Hash> {
+  if (isMock()) return mockTransfer(operationId, null, to, amount)
+  const key = serverConfig().referralMilestone.walletKey
+  if (!key) throw new Error('REFERRAL_WALLET_PRIVATE_KEY is not set')
+  const from = privateKeyToAccount(key).address
+  return (await durableTransaction(operationId, key, { to: GD.token, data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [to, amount] }), transfer: { token: GD.token, from, to, amount: String(amount) } })).hash
+}
+
+/** The referral wallet's G$ and CELO, for the admin view. */
+export async function referralWalletBalances(): Promise<{ address: Address; gd: number; celo: number } | null> {
+  const address = referralWalletAddress()
+  if (!address || isMock()) return null
+  const [gd, celoWei] = await Promise.all([gdBalance(address), publicClient().getBalance({ address })])
+  return { address, gd: Number(formatEther(gd)), celo: Number(formatEther(celoWei)) }
 }
 
 /** Rewards and refunds must reuse their durable operation ID on every retry. */

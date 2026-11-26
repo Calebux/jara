@@ -1,7 +1,6 @@
 import { verifyWebhook } from '@goodcash/sdk/server'
 import { atomic } from './db'
 import { serverConfig } from './env'
-import { handleReferralPayoutEvent } from './referral-payout'
 import { getUserById } from './users'
 
 // GoodCash: cash G$ out to a Nigerian bank, or add G$ by paying naira. Non-custodial: the person's
@@ -52,14 +51,6 @@ export async function handleGoodCashWebhook(raw: string, signature: string | nul
   } catch (err) {
     console.warn('[goodcash] webhook rejected', err instanceof Error ? err.message : 'invalid')
     return { status: 400, body: { error: 'Bad signature' } }
-  }
-  // Invite rewards Jara paid from its own treasury: matched by GoodCash's cash-out id, which only
-  // Jara's server knows. These update the payout rather than the generic activity below.
-  try {
-    if (event.type.startsWith('cashout.') && await handleReferralPayoutEvent(event.type, event.data)) return { status: 200, body: { ok: true } }
-  } catch (err) {
-    console.error('[goodcash] referral payout event not recorded, GoodCash will retry', event.id, err instanceof Error ? err.message : 'error')
-    return { status: 500, body: { error: 'Not recorded yet' } }
   }
   const row = entry(event)
   if (!row) return { status: 200, body: { ok: true, ignored: event.type } }

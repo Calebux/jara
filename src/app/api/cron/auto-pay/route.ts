@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { runAutoPayForAll } from '@/lib/auto-pay'
 import { serverConfig } from '@/lib/env'
 import { MoneyBusyError } from '@/lib/money-lock'
-import { refreshAllReferralPayouts } from '@/lib/referral-payout'
+import { payDueReferralMilestones } from '@/lib/rewards'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -17,9 +17,9 @@ export async function POST(req: Request) {
   }
   try {
     const results = await runAutoPayForAll()
-    // Invite-reward bank payouts still on their way (in case a GoodCash webhook was missed).
-    const payouts = await refreshAllReferralPayouts().catch(() => 0)
-    return NextResponse.json({ ran: results.length, results, referralPayouts: payouts })
+    // Referral milestones: G$ to the wallet of anyone who just reached 10, 20, 30… verified friends.
+    const referralMilestones = await payDueReferralMilestones().catch(() => 0)
+    return NextResponse.json({ ran: results.length, results, referralMilestones })
   } catch (err) {
     if (err instanceof MoneyBusyError) return NextResponse.json({ skipped: 'A check is already running' })
     console.warn('[auto-pay] sweep failed')

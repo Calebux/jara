@@ -140,11 +140,13 @@ export function serverConfig() {
       secretKey: process.env.GOODCASH_SECRET_KEY ?? '',
       webhookSecret: process.env.GOODCASH_WEBHOOK_SECRET ?? '',
     },
-    // Invite milestone: every `friends` verified friends earns `ngn` naira, paid by Jara straight to
-    // the person's bank through GoodCash. 0 naira switches it off.
+    // Referral program. Every `friends` verified friends earns G$ worth `ngn` naira, sent automatically
+    // from the referral wallet (its own key, funded separately) to the person's own wallet. The G$ 100
+    // per friend comes from this wallet too when it is set. 0 naira switches the milestone off.
     referralMilestone: {
       friends: num('REFERRAL_MILESTONE_FRIENDS', 10),
       ngn: num('REFERRAL_MILESTONE_NGN', 0),
+      walletKey: (process.env.REFERRAL_WALLET_PRIVATE_KEY || undefined) as `0x${string}` | undefined,
     },
     falconpay: {
       apiKey: process.env.FALCONPAY_API_KEY ?? '',
@@ -204,7 +206,7 @@ export function demoFundsAllowed(): boolean {
 export function assertSafeRuntime() {
   const cfg = serverConfig()
   if (cfg.moneyProblem) throw new Error(cfg.moneyProblem)
-  if (cfg.chain.mode === 'mock' && (falconKeyLive() || (vtpassLive() && cfg.vtpass.apiKey) || cfg.chain.treasuryKey || process.env.TELEMETRY_REPORTER_KEY || process.env.DAILY_CHALLENGE_SIGNER_KEY)) {
+  if (cfg.chain.mode === 'mock' && (falconKeyLive() || (vtpassLive() && cfg.vtpass.apiKey) || cfg.chain.treasuryKey || cfg.referralMilestone.walletKey || process.env.TELEMETRY_REPORTER_KEY || process.env.DAILY_CHALLENGE_SIGNER_KEY)) {
     throw new Error('Demo deployments must not contain live provider or treasury signing credentials.')
   }
   if (cfg.chain.mode === 'celo' && cfg.custody.provider === 'local' && !/^[0-9a-f]{64}$/i.test(cfg.walletSecret)) {

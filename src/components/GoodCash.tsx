@@ -47,6 +47,49 @@ async function verifiedWallet(root: `0x${string}`): Promise<EIP1193Provider> {
   return provider
 }
 
+/**
+ * The send function GoodCash calls with its one checked transaction. Before the wallet is asked,
+ * Jara tops the wallet up with a little CELO for the network fee (from GoodDollar's faucet), so a
+ * person with only G$ can still cash out.
+ */
+function verifiedSender(wallet: `0x${string}`, onError: (msg: string | null) => void) {
+  return async (tx: { to: `0x${string}`; data: `0x${string}`; from: `0x${string}` }) => {
+    onError(null)
+    try {
+      await fetch('/api/goodcash/gas', { method: 'POST', headers: { 'x-goodcash': '1' } }).catch(() => undefined)
+      const provider = await verifiedWallet(wallet)
+      const client = createWalletClient({ chain: celo, transport: custom(provider) })
+      await client.switchChain({ id: celo.id }).catch(() => client.addChain({ chain: celo }))
+      return await client.sendTransaction({ account: wallet, chain: celo, to: tx.to, data: tx.data, value: 0n })
+    } catch (err) {
+      onError(err instanceof Error && err.message.startsWith('Switch to your verified') ? err.message : walletErrorMessage(err))
+      throw err
+    }
+  }
+}
+
+function cashOutEvents(flash: (t: string) => void, onError: (msg: string | null) => void) {
+  return (e: CashOutEvent) => {
+    if (e.type === 'cashout.sent') flash('Sent. Your bank is usually paid within minutes.')
+    if (e.type === 'cashout.paid') flash('Paid to your bank 🎉')
+    if (e.type === 'cashout.failed') onError('That cash out did not finish. Check your history before trying again.')
+  }
+}
+
+/** Just the cash-out button (for example on a referral reward), prefilled with an amount. */
+export function GoodCashCashOut({ userId, wallet, flash, amountG, label, className }: { userId: string; wallet: `0x${string}`; flash: (t: string) => void; amountG?: number; label: string; className?: string }) {
+  const [error, setError] = useState<string | null>(null)
+  if (!goodCashConfigured()) return null
+  return (
+    <GoodCashProvider publishableKey={PUBLISHABLE_KEY} theme={THEME}>
+      <CashOutButton label={label} className={className ?? primary} signer={verifiedSender(wallet, setError)} wallet={wallet} partnerRef={userId}
+        defaultAmountG={amountG && amountG > 0 ? Math.floor(amountG) : undefined} onEvent={cashOutEvents(flash, setError)} />
+      {error && <p role="alert" className="mt-2 rounded-xl bg-[#fcf0e7] px-4 py-3 text-sm font-semibold text-ink">{error}</p>}
+      <p className="mt-1 text-center text-[11px] font-semibold opacity-60">Powered by GoodCash</p>
+    </GoodCashProvider>
+  )
+}
+
 type Props = {
   userId: string
   /** The verified GoodDollar wallet (root). G$ is cashed out from, and topped up into, this wallet. */
@@ -63,24 +106,8 @@ export function GoodCashCard({ userId, wallet, flash, defaultAmountG, heldByJara
   if (!goodCashConfigured()) return null
 
   // GoodCash hands over the one checked transaction; the verified wallet sends it on Celo.
-  const send = async (tx: { to: `0x${string}`; data: `0x${string}`; from: `0x${string}` }) => {
-    setError(null)
-    try {
-      const provider = await verifiedWallet(wallet)
-      const client = createWalletClient({ chain: celo, transport: custom(provider) })
-      await client.switchChain({ id: celo.id }).catch(() => client.addChain({ chain: celo }))
-      return await client.sendTransaction({ account: wallet, chain: celo, to: tx.to, data: tx.data, value: 0n })
-    } catch (err) {
-      setError(err instanceof Error && err.message.startsWith('Switch to your verified') ? err.message : walletErrorMessage(err))
-      throw err
-    }
-  }
-
-  const onCashOut = (e: CashOutEvent) => {
-    if (e.type === 'cashout.sent') flash('Sent. Your bank is usually paid within minutes.')
-    if (e.type === 'cashout.paid') flash('Paid to your bank 🎉')
-    if (e.type === 'cashout.failed') setError('That cash out did not finish. Check your history before trying again.')
-  }
+  const send = verifiedSender(wallet, setError)
+  const onCashOut = cashOutEvents(flash, setError)
 
   return (
     <GoodCashProvider publishableKey={PUBLISHABLE_KEY} theme={THEME}>

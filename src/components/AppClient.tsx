@@ -934,7 +934,7 @@ function Dashboard({ state, setState, flash, onProfile }: { state: State; setSta
             <div className="app-card p-6"><Icon name="jar" className="h-8 w-8 text-forest" /><h2 className="mt-4 text-lg font-bold">Your budgets set the limits.</h2><p className="mt-2 text-sm leading-relaxed text-ink/60">Paid jobs use your AI jar. Bill payments use their matching jar. Jara won’t borrow from another jar to finish a job.</p><button onClick={() => navigate('overview')} className="mt-4 text-sm font-bold text-forest">Manage your jars →</button></div>
           </div>
         </div>
-        <div hidden={tab !== 'rewards'} className="max-w-3xl"><RewardsCard state={state} flash={flash} /></div>
+        <div hidden={tab !== 'rewards'} className="max-w-3xl"><RewardsCard state={state} flash={flash} onPay={state.config.billsLive ? () => setPaying(true) : undefined} /></div>
         <div hidden={tab !== 'chat'} className="mx-auto max-w-3xl"><Chat state={state} setState={setState} flash={flash} /></div>
         {tab === 'vote' && (canVote
           ? <div className="max-w-3xl"><FlowVote key={state.user.rootAddress!} rootAddress={state.user.rootAddress!} /></div>
@@ -2065,7 +2065,7 @@ function AgentJobs({ state, setState, flash }: { state: State; setState: (s: Sta
   )
 }
 
-function RewardsCard({ state, flash }: { state: State; flash: (t: string) => void }) {
+function RewardsCard({ state, flash, onPay }: { state: State; flash: (t: string) => void; onPay?: () => void }) {
   const { rewards, user } = state
   return (
     <section className="app-card p-5 sm:p-7">
@@ -2074,7 +2074,7 @@ function RewardsCard({ state, flash }: { state: State; flash: (t: string) => voi
         <p className="font-bold text-forest">G$ {gdFmt(rewards.earnedGd)} earned</p>
       </div>
       <p className="mt-1 text-sm font-semibold text-ink/55">Jara collects these for you automatically.</p>
-      <InviteReward key={`${state.referralReward?.verifiedFriends}:${state.referralReward?.ready}:${state.referralReward?.paid.length}`} initial={state.referralReward} name={user.name} flash={flash} />
+      <InviteReward reward={state.referralReward} name={user.name} userId={user.id} wallet={state.config.chainMode === 'celo' && user.rootAddress ? (user.rootAddress as `0x${string}`) : null} flash={flash} onPay={onPay} />
       <ul className="mt-4 grid gap-2.5">
         {rewards.items.map((r) => (
           <li key={r.title} className="flex items-center gap-3">
