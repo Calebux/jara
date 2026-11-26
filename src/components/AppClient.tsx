@@ -14,6 +14,7 @@ import { walletClaimerMessage, walletKeyExportMessage, walletLoginMessage } from
 import { spendingPolicyAbi } from '@/lib/spending-policy'
 import { useSheetDialog } from './useSheetDialog'
 import { GoodCashCard } from './GoodCash'
+import { InviteReward, type InviteRewardState } from './InviteReward'
 import { DashboardNav, dashboardView, type DashboardView } from './DashboardNav'
 import { DailyChallenge } from './DailyChallenge'
 import { FlowVote } from './FlowVote'
@@ -76,6 +77,7 @@ interface State {
   aiTools: { id: string; name: string; blurb: string; priceGd: number; placeholder: string }[]
   rewards: { earnedGd: number; items: { title: string; detail: string; amountGd: number; done: boolean; progress: number }[] }
   referrals: { name: string; joinedAt: number; status: 'joined' | 'verified' | 'rewarded' }[]
+  referralReward?: InviteRewardState | null
   jobs: {
     exam: { on: boolean; exam: string | null; subjects: string[]; date: string | null; daysLeft: number | null; drillsDone: number; priceGd: number; options: string[] }
     scout: { on: boolean; interests: string | null; lastAt: number | null; priceGd: number }
@@ -2072,6 +2074,7 @@ function RewardsCard({ state, flash }: { state: State; flash: (t: string) => voi
         <p className="font-bold text-forest">G$ {gdFmt(rewards.earnedGd)} earned</p>
       </div>
       <p className="mt-1 text-sm font-semibold text-ink/55">Jara collects these for you automatically.</p>
+      <InviteReward key={`${state.referralReward?.verifiedFriends}:${state.referralReward?.ready}:${state.referralReward?.paid.length}`} initial={state.referralReward} name={user.name} flash={flash} />
       <ul className="mt-4 grid gap-2.5">
         {rewards.items.map((r) => (
           <li key={r.title} className="flex items-center gap-3">

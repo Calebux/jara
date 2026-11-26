@@ -395,6 +395,15 @@ export async function verifySpendingContract(): Promise<Address> {
   return address
 }
 
+/**
+ * One checked contract call from the treasury (a GoodCash cash out). Durable under `operationId`:
+ * a retry replays the same signed bytes, never a second transaction.
+ */
+export async function sendTreasuryCall(call: { to: Address; data: Hex }, operationId: string): Promise<Hash> {
+  if (isMock()) throw new Error('Treasury calls need CHAIN_MODE=celo.')
+  return (await durableTransaction(operationId, treasuryKey(), { to: call.to, data: call.data })).hash
+}
+
 /** Rewards and refunds must reuse their durable operation ID on every retry. */
 export async function sendGdFromTreasury(to: Address, amount: bigint, operationId: string): Promise<Hash> {
   if (isMock()) return mockTransfer(operationId, null, to, amount)

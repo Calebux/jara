@@ -140,6 +140,12 @@ export function serverConfig() {
       secretKey: process.env.GOODCASH_SECRET_KEY ?? '',
       webhookSecret: process.env.GOODCASH_WEBHOOK_SECRET ?? '',
     },
+    // Invite milestone: every `friends` verified friends earns `ngn` naira, paid by Jara straight to
+    // the person's bank through GoodCash. 0 naira switches it off.
+    referralMilestone: {
+      friends: num('REFERRAL_MILESTONE_FRIENDS', 10),
+      ngn: num('REFERRAL_MILESTONE_NGN', 0),
+    },
     falconpay: {
       apiKey: process.env.FALCONPAY_API_KEY ?? '',
       // sk_live_ keys go to production, everything else to the sandbox.

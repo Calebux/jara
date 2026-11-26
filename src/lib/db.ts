@@ -66,6 +66,32 @@ const SCHEMA = [
     pending_action TEXT,
     created_at INTEGER NOT NULL
   )`,
+  // Invite-milestone rewards paid to a bank through GoodCash, from the Jara treasury. One row per
+  // milestone (10 friends = 1, 20 = 2…). A new attempt only follows a payout proven not to have paid.
+  `CREATE TABLE IF NOT EXISTS referral_payouts (
+    user_id TEXT NOT NULL REFERENCES users (id),
+    milestone INTEGER NOT NULL,
+    attempt INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL,
+    amount_ngn INTEGER NOT NULL,
+    amount_g TEXT,
+    fee_percent REAL,
+    bank_code TEXT,
+    bank_name TEXT,
+    account_number TEXT,
+    account_name TEXT,
+    cashout_id TEXT,
+    tx_to TEXT,
+    tx_data TEXT,
+    expires_at INTEGER,
+    tx_hash TEXT,
+    receive_naira INTEGER,
+    error TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, milestone)
+  )`,
+  'CREATE INDEX IF NOT EXISTS referral_payouts_cashout_idx ON referral_payouts (cashout_id)',
   `CREATE TABLE IF NOT EXISTS jars (
     user_id TEXT NOT NULL REFERENCES users (id),
     kind TEXT NOT NULL,
