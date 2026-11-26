@@ -10,7 +10,7 @@ Object.assign(process.env, {
   DATABASE_URL: `file:${directory}/test.db`, CHAIN_MODE: 'mock', TOPUP_PROVIDER: 'mock', GD_NGN_RATE: '1',
   GOODCASH_SECRET_KEY: 'gc_sk_test_fake', GOODCASH_WEBHOOK_SECRET: SECRET, REFERRAL_MILESTONE_FRIENDS: '10', REFERRAL_MILESTONE_NGN: '5000',
 })
-const { db, run } = require('../src/lib/db.ts')
+const { db, run, referralStartingLine } = require('../src/lib/db.ts')
 const users = require('../src/lib/users.ts')
 const gc = require('../src/lib/goodcash-client.ts')
 const payout = require('../src/lib/referral-payout.ts')
@@ -27,7 +27,7 @@ function makeFake() {
       if (accountNumber === '0000000000') throw new GoodCashError('bank_account_not_found')
       return { accountName: 'ADA OKAFOR' }
     },
-    quote: async ({ amountG }) => ({ amountG: String(amountG), feePercent: 11, receive: { naira: Math.floor(Number(amountG) * 0.15 * 0.89 - 20), minimumNaira: 0 } }),
+    quote: async ({ amountG }) => ({ amountG: String(amountG), feePercent: 11, fees: [{ label: 'GoodDollar contribution', naira: 100 }], receive: { naira: Math.floor(Number(amountG) * 0.15 * 0.89 - 20), minimumNaira: 0 } }),
     createCashOut: async (args) => {
       if (f.byKey.has(args.idempotencyKey)) return f.byKey.get(args.idempotencyKey)
       f.created.push(args)
@@ -68,14 +68,14 @@ test('progress counts verified friends; the reward is ready at 10, not before', 
   await friends(user, 9)
   let s = await payout.referralRewardState(user)
   assert.equal(s.enabled, true)
-  assert.deepEqual([s.ready, s.towardNext, s.friendsPerReward, s.rewardNgn], [null, 9, 10, 5000])
+  assert.deepEqual([s.ready, s.towardNext, s.friendsPerReward, s.rewardNgn, s.rewardGd], [null, 9, 10, 5000, 5000])
   await assert.rejects(payout.claimReferralReward(user, bank), /unlocks at 10/)
   await friends(user, 10)
   s = await payout.referralRewardState(user)
   assert.deepEqual([s.ready, s.towardNext], [1, 0])
 })
 
-test('a wrong account sends nothing; a right one pays at least ₦5,000 once, and the next reward waits for 20 friends', async () => {
+test('a wrong account sends nothing; a right one cashes out the G$ worth ₦5,000 once, and the next reward waits for 20 friends', async () => {
   const user = await person()
   await friends(user, 10)
   await assert.rejects(payout.claimReferralReward(user, { bankCode: '058', accountNumber: '0000000000' }), /couldn’t find that account/)
@@ -88,7 +88,8 @@ test('a wrong account sends nothing; a right one pays at least ₦5,000 once, an
   assert.equal(made.recipient.accountName, 'ADA OKAFOR')
   assert.equal(made.partnerRef, user.id)
   assert.equal(made.idempotencyKey, `jara-referral-${user.id}-1-1`)
-  assert.ok((await fake.client.quote({ amountG: made.amountG })).receive.naira >= 5000, 'the bank gets at least the reward')
+  // GD_NGN_RATE=1 in this file: G$ 5,000 is worth ₦5,000. GoodCash's fees come out of it at the bank.
+  assert.equal(made.amountG, '5000')
   assert.deepEqual(fake.simulated, [fake.byKey.get(made.idempotencyKey).id])
   assert.equal(s.processing.status, 'processing')
   assert.equal(s.processing.accountEnding, '6789')
@@ -127,6 +128,24 @@ test('a payout GoodCash reports failed can be tried again, with a new identity, 
   s = await payout.referralRewardState(user)
   assert.equal(s.paid.length, 1)
   assert.equal((await cashouts(user)).length, 1)
+})
+
+test('the G$ amount follows today’s price, is shown before cashing out, and is fixed once sent', async () => {
+  const user = await person()
+  await friends(user, 10)
+  process.env.GD_NGN_RATE = '0.15'
+  try {
+    // ₦5,000 at ₦0.15 per G$ = G$ 33,333, rounded to G$ 33,300.
+    assert.equal((await payout.referralRewardState(user)).rewardGd, 33300)
+    const preview = await payout.previewReferralPayout(user)
+    assert.equal(preview.amountGd, 33300)
+    assert.equal(preview.receiveNaira, Math.floor(33300 * 0.15 * 0.89 - 20))
+    await payout.claimReferralReward(user, bank)
+    assert.equal(fake.created[0].amountG, '33300')
+    process.env.GD_NGN_RATE = '0.3'
+    const s = await payout.referralRewardState(user)
+    assert.equal(s.processing.amountGd, 33300)
+  } finally { process.env.GD_NGN_RATE = '1' }
 })
 
 test('two taps at once start one payout', async () => {
@@ -175,6 +194,23 @@ test('switched off without an amount; live keys never pay out against the simula
     await assert.rejects(payout.claimReferralReward(user, bank), /CHAIN_MODE=celo/)
     assert.equal(fake.created.length, 0)
   } finally { process.env.GOODCASH_SECRET_KEY = 'gc_sk_test_fake' }
+})
+
+test('starting line: sets of 10 people already had before launch count as paid, once; each new 10 pays', async () => {
+  const early = await person(), fresh = await person()
+  await friends(early, 13)
+  await friends(fresh, 4)
+  const client = await db()
+  assert.ok(await referralStartingLine(client, 'test-baseline') >= 1)
+  assert.equal(await referralStartingLine(client, 'test-baseline'), 0, 'runs once, ever')
+  let s = await payout.referralRewardState(early)
+  assert.deepEqual([s.ready, s.towardNext, s.paid.length], [null, 3, 1])
+  await assert.rejects(payout.claimReferralReward(early, bank), /unlocks at 20/)
+  await friends(early, 20)
+  assert.equal((await payout.referralRewardState(early)).ready, 2)
+  // Someone below 10 at launch keeps their progress and is paid at 10.
+  await friends(fresh, 10)
+  assert.equal((await payout.referralRewardState(fresh)).ready, 1)
 })
 
 after(async () => {

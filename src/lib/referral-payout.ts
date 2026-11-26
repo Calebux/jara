@@ -5,13 +5,16 @@ import { TransferPendingError, TransferRevertedError, hasSubmittedTransaction } 
 import { atomic, run } from './db'
 import { serverConfig } from './env'
 import * as gc from './goodcash-client'
+import { ngnPerGd } from './price'
 import { withUserLock } from './jars'
 import { getUserById, type User } from './users'
 import { authorizedUser } from './wallet-authorization'
 
 // Invite milestone rewards, paid in naira straight to the person's bank.
 //
-// Every REFERRAL_MILESTONE_FRIENDS verified friends (10 by default) earns REFERRAL_MILESTONE_NGN.
+// Every REFERRAL_MILESTONE_FRIENDS verified friends (10 by default) earns a G$ reward worth
+// REFERRAL_MILESTONE_NGN naira at today's G$ price. The amount is fixed when they cash out. GoodCash
+// turns that G$ into naira in their bank (its fees come out of it, shown before they confirm).
 // The person only picks their bank and types their account number; Jara's treasury pays the G$ to
 // GoodCash from the server, so they sign nothing, need no wallet open and pay no network fee.
 //
@@ -57,6 +60,13 @@ export function milestoneConfig() {
   return { friends: Math.max(1, Math.floor(friends)), ngn: Math.max(0, Math.floor(ngn)), enabled: ngn > 0 && goodcash }
 }
 
+/** The G$ reward worth `ngn` naira at today's price, rounded to the nearest G$ 100. */
+async function rewardGdFor(ngn: number): Promise<number> {
+  const rate = await ngnPerGd()
+  if (!(rate > 0)) throw new Error('no G$ price')
+  return Math.max(100, Math.round(ngn / rate / 100) * 100)
+}
+
 const opId = (r: Pick<PayoutRow, 'user_id' | 'milestone' | 'attempt'>) => `goodcash:referral:${r.user_id}:${r.milestone}:${r.attempt}`
 const idempotencyKey = (r: Pick<PayoutRow, 'user_id' | 'milestone' | 'attempt'>) => `jara-referral-${r.user_id}-${r.milestone}-${r.attempt}`
 const isTestKey = () => serverConfig().goodcash.secretKey.startsWith('gc_sk_test_')
@@ -97,6 +107,7 @@ export async function referralRewardState(user: User) {
   }
   const view = (r: PayoutRow) => ({
     milestone: Number(r.milestone),
+    amountGd: r.amount_g == null ? null : Number(r.amount_g),
     status: r.status === 'preparing' || r.status === 'sending' || r.status === 'sent' ? 'processing' as const : r.status,
     amountNgn: Number(r.amount_ngn),
     receiveNaira: r.receive_naira == null ? null : Number(r.receive_naira),
@@ -108,7 +119,10 @@ export async function referralRewardState(user: User) {
   return {
     enabled: cfg.enabled,
     friendsPerReward: cfg.friends,
+    /** The naira value of the reward; it is paid in G$. */
     rewardNgn: cfg.ngn,
+    /** Today's G$ for the reward (null if the price is unavailable). Fixed when they cash out. */
+    rewardGd: cfg.enabled ? await rewardGdFor(cfg.ngn).catch(() => null) : null,
     verifiedFriends: friends,
     /** Friends counted toward the next reward. */
     towardNext: friends - earned * cfg.friends,
@@ -149,24 +163,23 @@ export async function verifyPayoutAccount(input: { bankCode?: unknown; accountNu
   }
 }
 
-/**
- * G$ to send so the bank receives at least `ngn` naira after GoodCash's fees (GoodDollar exit
- * contribution, GoodCash fee, bank fee). Receive is close to linear in G$, so a few quotes settle it.
- */
-async function quoteFor(ngn: number): Promise<{ amountG: number; quote: Quote }> {
-  const client = gc.goodCashServer()
-  let amountG = 20_000
-  let quote = await client.quote({ amountG })
-  for (let i = 0; i < 5; i++) {
-    const got = quote.receive.naira
-    if (got >= ngn && got <= ngn * 1.01 + 50) return { amountG, quote }
-    const next = Math.ceil(got > 0 ? amountG * (ngn / got) * 1.002 : amountG * 2)
-    if (next === amountG) break
-    amountG = next
-    quote = await client.quote({ amountG })
+/** What cashing out today's reward pays into the bank, after GoodCash's fees. */
+async function priceReward(ngn: number): Promise<{ amountG: number; quote: Quote }> {
+  const amountG = await rewardGdFor(ngn)
+  return { amountG, quote: await gc.goodCashServer().quote({ amountG }) }
+}
+
+/** For the cash-out sheet: the G$ reward and what reaches the bank, with every fee. */
+export async function previewReferralPayout(user: User) {
+  const cfg = milestoneConfig()
+  const state = await referralRewardState(user)
+  if (!cfg.enabled || !state.ready) throw new ReferralPayoutError('No reward is ready to cash out yet.', 409)
+  try {
+    const { amountG, quote } = await priceReward(cfg.ngn)
+    return { amountGd: amountG, receiveNaira: quote.receive.naira, fees: (quote.fees ?? []).map((f) => ({ label: f.label, naira: f.naira ?? null })) }
+  } catch (err) {
+    throw new ReferralPayoutError(friendly(err, 'We couldn’t get today’s G$ price. Please try again in a minute.'), 503)
   }
-  while (quote.receive.naira < ngn) { amountG = Math.ceil(amountG * 1.005) + 1; quote = await client.quote({ amountG }) }
-  return { amountG, quote }
 }
 
 /**
@@ -189,8 +202,8 @@ export async function claimReferralReward(input: User, details: { bankCode?: unk
     const account = cleanAccount(details)
     const { accountName } = await verifyPayoutAccount(account)
     const bank = (await gc.goodCashBanks().catch(() => [])).find((b) => b.code === account.bankCode)
-    let priced: Awaited<ReturnType<typeof quoteFor>>
-    try { priced = await quoteFor(cfg.ngn) } catch (err) { throw new ReferralPayoutError(friendly(err, 'We couldn’t price your payout right now. Please try again.'), 503) }
+    let priced: Awaited<ReturnType<typeof priceReward>>
+    try { priced = await priceReward(cfg.ngn) } catch (err) { throw new ReferralPayoutError(friendly(err, 'We couldn’t get today’s G$ price. Please try again in a minute.'), 503) }
 
     const prior = await row(user.id, state.ready)
     const now = Date.now()
@@ -283,7 +296,7 @@ async function markPaid(r: PayoutRow, naira: number | null) {
     await tx.execute({
       sql: `INSERT OR IGNORE INTO activity (user_id, type, amount_ngn, status, title, detail, provider, provider_ref, tx_hash, operation_id, created_at)
             VALUES (?, 'cashout', ?, 'done', ?, ?, 'goodcash', ?, ?, ?, ?)`,
-      args: [r.user_id, received, `Invite reward paid to your bank · ₦${Number(received).toLocaleString('en-NG')}`, `${r.bank_name ?? 'Bank'} ••${(r.account_number ?? '').slice(-4)} via GoodCash`, r.cashout_id, r.tx_hash, `goodcash:referral:${r.user_id}:${r.milestone}`, Date.now()],
+      args: [r.user_id, received, `Invite reward cashed out · ₦${Number(received).toLocaleString('en-NG')}`, `G$ ${Number(r.amount_g ?? 0).toLocaleString('en-US')} to ${r.bank_name ?? 'your bank'} ••${(r.account_number ?? '').slice(-4)} via GoodCash`, r.cashout_id, r.tx_hash, `goodcash:referral:${r.user_id}:${r.milestone}`, Date.now()],
     })
   })
   r.status = 'paid'

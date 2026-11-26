@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { apiFailure } from '@/lib/api-error'
 import { goodCashBanks } from '@/lib/goodcash-client'
 import { rateLimit } from '@/lib/ratelimit'
-import { ReferralPayoutError, claimReferralReward, milestoneConfig, referralRewardState, refreshReferralPayout, verifyPayoutAccount } from '@/lib/referral-payout'
+import { ReferralPayoutError, claimReferralReward, milestoneConfig, previewReferralPayout, referralRewardState, refreshReferralPayout, verifyPayoutAccount } from '@/lib/referral-payout'
 import { fromThisSite } from '@/lib/same-site'
 import { requireUser } from '@/lib/session'
 
@@ -18,8 +18,10 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.has('banks')) {
     if (!milestoneConfig().enabled) return reply({ error: 'Invite rewards are not switched on yet.' }, 409)
     try {
-      return reply({ banks: (await goodCashBanks()).map((b) => ({ code: b.code, name: b.name, popular: b.popular })) })
-    } catch {
+      const [banks, payout] = await Promise.all([goodCashBanks(), previewReferralPayout(user)])
+      return reply({ banks: banks.map((b) => ({ code: b.code, name: b.name, popular: b.popular })), payout })
+    } catch (err) {
+      if (err instanceof ReferralPayoutError) return reply({ error: err.message }, err.status)
       return reply({ error: 'Couldn’t load the list of banks. Please try again.' }, 503)
     }
   }

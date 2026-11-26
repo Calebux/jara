@@ -6,13 +6,15 @@ import { Icon } from './Icon'
 import { useSheetDialog } from './useSheetDialog'
 
 // Invite milestone reward: progress toward the next reward, a celebration when it is ready, and a
-// two-field bank payout (bank + account number). Jara pays it from its own wallet through GoodCash,
-// so the person signs nothing and needs no G$ or gas of their own.
+// two-field bank payout (bank + account number). The reward is G$ worth ₦5,000 (by default) at today's
+// price; GoodCash turns it into naira in their bank. Jara sends the G$ from its own wallet, so the
+// person signs nothing and needs no G$ or gas of their own.
 
 export type InviteRewardState = {
   enabled: boolean
   friendsPerReward: number
   rewardNgn: number
+  rewardGd: number | null
   verifiedFriends: number
   towardNext: number
   ready: number | null
@@ -20,10 +22,11 @@ export type InviteRewardState = {
   paid: Payout[]
   lastFailed: Payout | null
 }
-type Payout = { milestone: number; status: string; amountNgn: number; receiveNaira: number | null; bankName: string | null; accountEnding: string | null; accountName: string | null; error: string | null }
+type Payout = { milestone: number; amountGd: number | null; status: string; amountNgn: number; receiveNaira: number | null; bankName: string | null; accountEnding: string | null; accountName: string | null; error: string | null }
 type Bank = { code: string; name: string; popular: boolean }
 
 const ngn = (n: number) => `₦${n.toLocaleString('en-NG')}`
+const gd = (n: number) => `G$ ${n.toLocaleString('en-US')}`
 
 async function call<T>(body?: unknown, query = ''): Promise<T> {
   const res = await fetch(`/api/referral-reward${query}`, {
@@ -54,6 +57,8 @@ export function InviteReward({ initial, name, flash }: { initial: InviteRewardSt
 
   if (!reward?.enabled) return null
   const { friendsPerReward: goal, rewardNgn, towardNext } = reward
+  // "G$ 33,300 (≈ ₦5,000)", or the naira value alone while the G$ price is unavailable.
+  const prize = reward.rewardGd ? `${gd(reward.rewardGd)} (≈ ${ngn(rewardNgn)})` : `G$ worth ${ngn(rewardNgn)}`
   const lastPaid = reward.paid.at(-1)
 
   return (
@@ -64,52 +69,53 @@ export function InviteReward({ initial, name, flash }: { initial: InviteRewardSt
             <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">Reward ready</p>
             <p className="mt-1 text-xl leading-snug font-bold">🎉 Congratulations{name ? `, ${name.split(' ')[0]}` : ''}!</p>
             <p className="mt-1 text-sm leading-relaxed text-cream/85">
-              You’ve brought {goal * reward.ready} verified friends to Jara. Your <b className="text-cream">{ngn(rewardNgn)}</b> reward is ready to go straight to your bank account.
+              You’ve brought {goal * reward.ready} verified friends to Jara. Your <b className="text-cream">{prize}</b> reward is ready. Cash it out to your bank account with GoodCash.
             </p>
             {reward.lastFailed?.error && <p className="mt-3 rounded-xl bg-cream/10 px-3 py-2 text-sm font-semibold">{reward.lastFailed.error}</p>}
             <button onClick={() => setOpen(true)} className="app-button mt-4 w-full justify-center bg-mandarin text-white hover:opacity-95 min-h-12 text-sm">
-              Cash out {ngn(rewardNgn)} to my bank <Icon name="arrow" className="h-4 w-4" />
+              Cash out my reward <Icon name="arrow" className="h-4 w-4" />
             </button>
-            <p className="mt-2 text-center text-[11px] font-semibold text-cream/60">Free for you · no wallet needed · usually paid in minutes</p>
+            <p className="mt-2 text-center text-[11px] font-semibold text-cream/60">No wallet or network fee needed · usually paid in minutes</p>
           </div>
         </div>
       ) : processing ? (
         <div className="mt-4 rounded-2xl bg-[#faf4dc] p-5">
           <p className="text-[11px] font-bold tracking-[0.14em] text-ink/50 uppercase">On its way</p>
-          <p className="mt-1 font-bold">{ngn(processing.amountNgn)} is being sent to {processing.bankName ?? 'your bank'} ••{processing.accountEnding}</p>
+          <p className="mt-1 font-bold">{processing.amountGd ? gd(processing.amountGd) : 'Your reward'} is being cashed out to {processing.bankName ?? 'your bank'} ••{processing.accountEnding}</p>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink/10"><div className="h-full w-2/3 animate-pulse rounded-full bg-mandarin" /></div>
           <p className="mt-2 text-xs font-semibold text-ink/55">Usually within minutes. You can leave this page; we’ll keep checking.</p>
         </div>
       ) : (
         <div className="mt-4 rounded-2xl bg-[#f4f5ef] p-5">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="font-bold">Invite {goal} friends, get {ngn(rewardNgn)}</p>
+            <p className="font-bold">Invite {goal} friends, get {prize}</p>
             <span className="shrink-0 text-sm font-bold text-forest">{towardNext}/{goal}</span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink/10">
             <div className="h-full rounded-full bg-mandarin transition-all" style={{ width: `${Math.max((towardNext / goal) * 100, 4)}%` }} />
           </div>
           <p className="mt-2 text-xs font-semibold text-ink/55">
-            {goal - towardNext} more verified friend{goal - towardNext === 1 ? '' : 's'} and {ngn(rewardNgn)} goes straight to your bank account.
+            {goal - towardNext} more verified friend{goal - towardNext === 1 ? '' : 's'} to unlock it. Cash it out to your bank with GoodCash.
           </p>
         </div>
       )}
       {lastPaid && !reward.ready && !processing && (
         <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-forest">
           <Icon name="check" className="h-3.5 w-3.5" strokeWidth={3} />
-          {reward.paid.length > 1 ? `${reward.paid.length} rewards paid` : `${ngn(lastPaid.receiveNaira ?? lastPaid.amountNgn)} paid`}{lastPaid.bankName ? ` to ${lastPaid.bankName} ••${lastPaid.accountEnding}` : ''}
+          {reward.paid.length > 1 ? `${reward.paid.length} rewards cashed out` : `${lastPaid.amountGd ? `${gd(lastPaid.amountGd)} cashed out` : 'Reward paid'}${lastPaid.receiveNaira ? ` · ${ngn(lastPaid.receiveNaira)}` : ''}`}{lastPaid.bankName ? ` to ${lastPaid.bankName} ••${lastPaid.accountEnding}` : ''}
         </p>
       )}
       {open && reward.ready && (
-        <CashOutSheet amountNgn={rewardNgn} onClose={() => setOpen(false)} onDone={(r) => { setReward(r); setOpen(false); flash(r.paid.length > reward.paid.length ? 'Paid to your bank 🎉' : 'Sent! Your bank is usually paid within minutes.') }} />
+        <CashOutSheet onClose={() => setOpen(false)} onDone={(r) => { setReward(r); setOpen(false); flash(r.paid.length > reward.paid.length ? 'Paid to your bank 🎉' : 'Sent! Your bank is usually paid within minutes.') }} />
       )}
     </>
   )
 }
 
-function CashOutSheet({ amountNgn, onClose, onDone }: { amountNgn: number; onClose: () => void; onDone: (r: InviteRewardState) => void }) {
+function CashOutSheet({ onClose, onDone }: { onClose: () => void; onDone: (r: InviteRewardState) => void }) {
   const dialogRef = useSheetDialog(onClose)
   const [banks, setBanks] = useState<Bank[] | null>(null)
+  const [payout, setPayout] = useState<{ amountGd: number; receiveNaira: number; fees: { label: string; naira: number | null }[] } | null>(null)
   const [search, setSearch] = useState('')
   const [bank, setBank] = useState<Bank | null>(null)
   const [account, setAccount] = useState('')
@@ -121,7 +127,7 @@ function CashOutSheet({ amountNgn, onClose, onDone }: { amountNgn: number; onClo
 
   useEffect(() => {
     let live = true
-    call<{ banks: Bank[] }>(undefined, '?banks=1').then((r) => live && setBanks(r.banks)).catch((e) => live && setError(e instanceof Error ? e.message : 'Couldn’t load banks.'))
+    call<{ banks: Bank[]; payout: NonNullable<typeof payout> }>(undefined, '?banks=1').then((r) => { if (live) { setBanks(r.banks); setPayout(r.payout) } }).catch((e) => live && setError(e instanceof Error ? e.message : 'Couldn’t load banks.'))
     return () => { live = false }
   }, [])
 
@@ -168,8 +174,8 @@ function CashOutSheet({ amountNgn, onClose, onDone }: { amountNgn: number; onClo
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Cash out your invite reward" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="animate-pop max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[1.75rem] bg-[#fcfcf8] sm:rounded-[1.75rem] sm:border sm:border-ink/10 sm:shadow-xl">
         <div className="flex items-center justify-between border-b border-ink/8 bg-white px-6 py-5">
           <div>
-            <h3 className="text-xl font-bold tracking-tight">Send {ngn(amountNgn)} to my bank</h3>
-            <p className="text-xs font-semibold text-ink/50">Your invite reward · free for you</p>
+            <h3 className="text-xl font-bold tracking-tight">Cash out {payout ? gd(payout.amountGd) : 'my reward'}</h3>
+            <p className="text-xs font-semibold text-ink/50">Your invite reward, to your bank with GoodCash</p>
           </div>
           <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-[#f4f5ef] text-ink/60 hover:bg-[#edf2e8] hover:text-forest" aria-label="Close">
             <Icon name="x" className="h-4 w-4" strokeWidth={3} />
@@ -177,6 +183,22 @@ function CashOutSheet({ amountNgn, onClose, onDone }: { amountNgn: number; onClo
         </div>
 
         <div className="grid gap-5 p-6">
+          {payout && (
+            <div className="rounded-2xl bg-white p-4 ring-1 ring-ink/10">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-ink/60">Your reward</span><span className="font-bold">{gd(payout.amountGd)}</span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-ink/60">You get in your bank</span><span className="text-lg font-bold text-forest">≈ {ngn(payout.receiveNaira)}</span>
+              </div>
+              {payout.fees.length > 0 && (
+                <details className="mt-2 text-xs text-ink/55">
+                  <summary className="cursor-pointer font-semibold">After GoodCash fees</summary>
+                  <ul className="mt-1 grid gap-0.5">{payout.fees.map((f) => <li key={f.label} className="flex justify-between gap-2"><span>{f.label}</span>{f.naira != null && <span>{ngn(f.naira)}</span>}</li>)}</ul>
+                </details>
+              )}
+            </div>
+          )}
           <div className="grid gap-2">
             <p className="text-[11px] font-bold tracking-[0.12em] text-ink/50 uppercase">1 · Your bank</p>
             {bank ? (
@@ -211,10 +233,10 @@ function CashOutSheet({ amountNgn, onClose, onDone }: { amountNgn: number; onClo
           {error && <p role="alert" className="rounded-xl bg-[#fcf0e7] px-4 py-3 text-sm font-semibold">{error}</p>}
 
           <button disabled={!confirmedName || sending} onClick={() => void send()} className="app-button min-h-12 justify-center bg-forest text-sm text-cream hover:bg-forest-soft disabled:opacity-60">
-            {sending ? 'Sending…' : confirmedName ? `Send ${ngn(amountNgn)} to ${confirmedName.split(' ')[0]}` : 'Send to my bank'}
+            {sending ? 'Sending…' : confirmedName ? `Cash out to ${confirmedName.split(' ')[0]}’s account` : 'Cash out to my bank'}
           </button>
           <p className="-mt-2 text-center text-xs font-semibold text-ink/50">Make sure the name above is yours. Bank payouts can’t be reversed.</p>
-          <p className="text-center text-[11px] font-semibold text-ink/40">Paid by Jara · Powered by GoodCash</p>
+          <p className="text-center text-[11px] font-semibold text-ink/40">Sent by Jara · Powered by GoodCash</p>
         </div>
       </div>
     </div>
