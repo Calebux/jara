@@ -9,8 +9,9 @@ const HOUR = 3_600_000
 Object.assign(process.env, {
   DATABASE_URL: `file:${directory}/test.db`, CHAIN_MODE: 'mock', TOPUP_PROVIDER: 'mock', GD_NGN_RATE: '0.2', CRON_SECRET: 'cron',
   STREAK_EVENT_ID: 'test-streak', STREAK_START_AT: String(Date.now() - HOUR), STREAK_END_AT: String(Date.now() + HOUR),
-  STREAK_PRIZE_NGN: '5000', STREAK_WINNERS: '3', STREAK_RUNS_PER_DAY: '5', STREAK_RUNS_PER_FRIEND: '3', STREAK_MAX_FRIEND_RUNS: '30',
+  STREAK_PRIZE_GD: '32000', STREAK_WINNERS: '3', STREAK_RUNS_PER_DAY: '5', STREAK_RUNS_PER_FRIEND: '3', STREAK_MAX_FRIEND_RUNS: '30',
   STREAK_GOLDEN_HOURS: '', STREAK_GOLDEN_MINUTES: '15', STREAK_REQUIRE_FLOWSTATE: 'false',
+  STREAK_PER_CORRECT_GD: '20', STREAK_POOL_CAP_GD: '100000', STREAK_DAILY_CAP_GD: '100',
 })
 const { db, run } = require('../src/lib/db.ts')
 const users = require('../src/lib/users.ts')
@@ -25,6 +26,8 @@ async function player(root, extra = {}) {
   const user = await users.createUser()
   await users.updateUser(user.id, { connected: true, rootAddress: root ?? rootFor(user.id) })
   if (extra.referredBy) await run('UPDATE users SET referred_by = ? WHERE id = ?', [extra.referredBy, user.id])
+  if (extra.join === false) return users.getUserById(user.id)
+  await streak.joinStreak(await users.getUserById(user.id), { campus: extra.campus ?? 'UNILAG', name: 'Test Player' })
   return users.getUserById(user.id)
 }
 /** Test-only: reads the server's key to find the right (or wrong) option for the question in play. */
@@ -69,8 +72,15 @@ test('a run never reveals the answer, resumes instead of restarting, and one ide
   assert.equal(view.question.options.length, 2)
   assert.equal(JSON.stringify(view).match(/flipped|correct/), null)
   assert.equal((await streak.startRun(user)).runId, view.runId)
-  const second = await player(user.rootAddress)
-  await assert.rejects(streak.startRun(second), (err) => err.code === 'played_elsewhere')
+  const second = await player(user.rootAddress, { join: false })
+  await assert.rejects(streak.startRun(second, { campus: 'UNILAG' }), (err) => err.code === 'played_elsewhere')
+  // A school is required before the first run; a name too when the account has none.
+  const fresh = await player(undefined, { join: false })
+  await assert.rejects(streak.startRun(fresh), (err) => err.code === 'needs_campus')
+  await assert.rejects(streak.joinStreak(fresh, { campus: 'UNILAG' }), (err) => err.code === 'needs_name')
+  const joined = await streak.joinStreak(fresh, { campus: 'UNILAG', name: 'Ada Obi' })
+  assert.equal(joined.campus, 'UNILAG')
+  assert.equal(joined.name, 'Ada Obi')
 })
 
 test('right answers build the streak and score once; a wrong answer ends the run and the best run stays', async () => {
@@ -129,7 +139,7 @@ test('five runs a day, then three more for each friend who joins with the link a
   await assert.rejects(streak.startRun(user), (err) => err.code === 'no_runs')
   const friend = await player(undefined, { referredBy: user.id })
   // The same person on a second account is still one friend.
-  await player(friend.rootAddress, { referredBy: user.id })
+  await player(friend.rootAddress, { referredBy: user.id, join: false })
   let home = await streak.streakHome(user)
   assert.equal(home.runs.friends, 1)
   assert.equal(home.runs.left, 3)
@@ -155,17 +165,50 @@ test('Golden Hour doubles the points of a correct answer', async () => {
 })
 
 test('campus: picked once, and campuses rank by their players’ best scores', async () => {
-  const user = await player()
-  await streak.setCampus(user, 'UNILAG')
-  await assert.rejects(streak.setCampus(user, 'Atlantis'), (err) => err.status === 400)
-  await streak.setCampus(user, 'OAU (Ife)')
+  const user = await player(undefined, { campus: 'UNILAG' })
+  await assert.rejects(streak.joinStreak(user, { campus: 'Atlantis' }), (err) => err.status === 400)
+  await streak.joinStreak(user, { campus: 'OAU (Ife)' })
   assert.equal((await streak.streakHome(user)).campus, 'UNILAG')
   await correctRun(user, 2)
   const board = await streak.leaderboard(null)
   assert.ok(board.campuses.some((c) => c.campus === 'UNILAG' && c.score > 0))
 })
 
-test('the top 3 are paid G$ worth ₦5,000 each to their own wallet, exactly once, only after the end', async () => {
+test('G$ 20 per correct answer: shown at once, sent to the wallet once when the run ends, capped per day', async () => {
+  const user = await player()
+  const before = Number(await chain.gdBalance(user.rootAddress)) / 1e18
+  let view = await streak.startRun(user)
+  const first = await streak.answer(user, { runId: view.runId, index: 0, choice: await choiceFor(view) })
+  assert.equal(first.result.gd, 20)
+  assert.equal(first.run.earnedGd, 20)
+  view = first.run
+  for (let i = 0; i < 6; i++) view = (await streak.answer(user, { runId: view.runId, index: view.question.index, choice: await choiceFor(view) })).run
+  // Daily cap of G$ 100: the 6th and 7th correct answers still score points but earn no G$.
+  assert.equal(view.earnedGd, 100)
+  assert.equal(view.streak, 7)
+  // Nothing is sent mid-run.
+  assert.equal(await streak.payRunEarnings(view.runId), 'open')
+  const end = await streak.answer(user, { runId: view.runId, index: view.question.index, choice: await choiceFor(view, false) })
+  assert.equal(end.run.finished, true)
+  assert.equal(await streak.payRunEarnings(view.runId), 'paid')
+  assert.equal(await streak.payRunEarnings(view.runId), 'paid')
+  await streak.settlePlayer(user)
+  await streak.settleEarnings()
+  assert.equal(Math.round(Number(await chain.gdBalance(user.rootAddress)) / 1e18 - before), 100)
+  assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE user_id = ? AND title LIKE '%Jara Streak: %correct%'", [user.id])).rows[0].n, 1)
+  // An abandoned run (the player closed the app mid-question) is paid by the cron once it times out.
+  const other = await player()
+  const v = await streak.startRun(other)
+  const a = await streak.answer(other, { runId: v.runId, index: 0, choice: await choiceFor(v) })
+  await run('UPDATE streak_answers SET deadline = ? WHERE run_id = ? AND idx = ?', [Date.now() - 10_000, v.runId, a.run.question.index])
+  await streak.settleEarnings()
+  assert.equal((await run('SELECT paid_at FROM streak_runs WHERE id = ?', [v.runId])).rows[0].paid_at > 0, true)
+  const report = await streak.streakReport()
+  assert.ok(report.answerGd.sent >= 120)
+  assert.ok(report.campuses.some((c) => c.campus === 'UNILAG'))
+})
+
+test('the top 3 are paid G$ 32,000 each to their own wallet, exactly once, only after the end', async () => {
   // Three clear leaders.
   const leaders = []
   for (const n of [12, 11, 10]) { const u = await player(); await correctRun(u, n); leaders.push(u) }
@@ -177,7 +220,7 @@ test('the top 3 are paid G$ worth ₦5,000 each to their own wallet, exactly onc
     const out = await streak.payWinners()
     assert.equal(out.status, 'done')
     assert.deepEqual(out.prizes.map((p) => p.status), ['paid', 'paid', 'paid'])
-    assert.equal(out.prizes[0].amountGd, 25_000) // ₦5,000 at ₦0.2 per G$
+    assert.equal(out.prizes[0].amountGd, 32_000)
     const board = await streak.leaderboard(null)
     assert.deepEqual(board.top.slice(0, 3).map((p) => p.score), (await run("SELECT score FROM streak_prizes WHERE event_id = 'test-streak' ORDER BY rank")).rows.map((r) => Number(r.score)))
     const winners = (await run("SELECT user_id FROM streak_prizes WHERE event_id = 'test-streak' ORDER BY rank")).rows.map((r) => r.user_id)
@@ -185,8 +228,8 @@ test('the top 3 are paid G$ worth ₦5,000 each to their own wallet, exactly onc
     // Again (the cron runs every minute): nothing more is sent.
     await streak.payWinners()
     const afterBalances = await balances()
-    assert.deepEqual(afterBalances.map((b, i) => Math.round(b - before[i])), [25_000, 25_000, 25_000])
-    assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE type = 'reward' AND title LIKE '%Jara Streak%'")).rows[0].n, 3)
+    assert.deepEqual(afterBalances.map((b, i) => Math.round(b - before[i])), [32_000, 32_000, 32_000])
+    assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE type = 'reward' AND title LIKE '%Jara Streak: #%'")).rows[0].n, 3)
     // No new runs once it has ended.
     await assert.rejects(streak.startRun(leaders[0]), (err) => err.code === 'streak_closed')
   } finally { process.env.STREAK_END_AT = String(Date.now() + HOUR) }

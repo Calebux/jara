@@ -199,7 +199,10 @@ const SCHEMA = [
     score INTEGER NOT NULL DEFAULT 0,
     started_at INTEGER NOT NULL,
     finished_at INTEGER,
-    ended TEXT
+    ended TEXT,
+    earned_gd INTEGER NOT NULL DEFAULT 0,
+    paid_at INTEGER,
+    tx_hash TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS streak_runs_player_idx ON streak_runs (event_id, root_address, day)`,
   `CREATE TABLE IF NOT EXISTS streak_answers (
@@ -213,6 +216,7 @@ const SCHEMA = [
     choice INTEGER,
     correct INTEGER,
     points INTEGER NOT NULL DEFAULT 0,
+    gd INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (run_id, idx)
   )`,
   // Winners, frozen once when the bounty closes, so a re-run pays the same people the same amount.
@@ -269,6 +273,11 @@ async function connect(): Promise<Client> {
   // Columns added after the first release.
   for (const sql of [
     'ALTER TABLE users ADD COLUMN claimer_address TEXT',
+    // Jara Streak per-answer G$ (added after the first test build of the bounty).
+    'ALTER TABLE streak_runs ADD COLUMN earned_gd INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE streak_runs ADD COLUMN paid_at INTEGER',
+    'ALTER TABLE streak_runs ADD COLUMN tx_hash TEXT',
+    'ALTER TABLE streak_answers ADD COLUMN gd INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE users ADD COLUMN claimer_factory TEXT',
     'ALTER TABLE users ADD COLUMN claimer_active INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE users ADD COLUMN skills TEXT NOT NULL DEFAULT \'[]\'',
@@ -288,6 +297,7 @@ async function connect(): Promise<Client> {
     'CREATE INDEX IF NOT EXISTS activity_provider_ref_idx ON activity (provider_ref)',
     'ALTER TABLE activity ADD COLUMN operation_id TEXT',
     'CREATE UNIQUE INDEX IF NOT EXISTS activity_operation_idx ON activity(operation_id)',
+    'CREATE INDEX IF NOT EXISTS streak_runs_open_idx ON streak_runs (event_id, finished_at, paid_at)',
   ]) {
     try {
       await client.execute(sql)

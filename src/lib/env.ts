@@ -160,9 +160,15 @@ export function serverConfig() {
       endAt: time('STREAK_END_AT'),
       // Friends who join from this moment earn extra runs (defaults to the start).
       invitesFrom: time('STREAK_INVITES_FROM'),
-      // Each winner gets this many naira in G$, at the G$ price when the winners are frozen.
-      prizeNgn: num('STREAK_PRIZE_NGN', 5000),
+      // Each winner gets this much G$ (G$ 32,000 is about ₦5,000 at ₦0.156 per G$, Nov 2026).
+      prizeGd: num('STREAK_PRIZE_GD', 32000),
       winners: num('STREAK_WINNERS', 3),
+      // G$ for every correct answer, sent to the player's wallet after each run. Stops when the
+      // whole bounty has paid STREAK_POOL_CAP_GD (0 turns per-answer G$ off), and each player earns
+      // at most STREAK_DAILY_CAP_GD a day (Lagos time).
+      perCorrectGd: num('STREAK_PER_CORRECT_GD', 20),
+      poolCapGd: num('STREAK_POOL_CAP_GD', 0),
+      dailyCapGd: num('STREAK_DAILY_CAP_GD', 400),
       runsPerDay: num('STREAK_RUNS_PER_DAY', 5),
       runsPerFriend: num('STREAK_RUNS_PER_FRIEND', 3),
       maxFriendRuns: num('STREAK_MAX_FRIEND_RUNS', 30),
