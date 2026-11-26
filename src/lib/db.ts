@@ -173,6 +173,60 @@ const SCHEMA = [
     referred_user_id TEXT NOT NULL REFERENCES users (id),
     created_at INTEGER NOT NULL
   )`,
+  // Jara Streak (campus bounty). One player per verified identity (root wallet) per event.
+  `CREATE TABLE IF NOT EXISTS streak_players (
+    event_id TEXT NOT NULL,
+    root_address TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users (id),
+    campus TEXT,
+    best_score INTEGER NOT NULL DEFAULT 0,
+    best_streak INTEGER NOT NULL DEFAULT 0,
+    best_at INTEGER,
+    runs INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (event_id, root_address)
+  )`,
+  `CREATE INDEX IF NOT EXISTS streak_players_board_idx ON streak_players (event_id, best_score DESC, best_at)`,
+  `CREATE TABLE IF NOT EXISTS streak_runs (
+    id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL,
+    root_address TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users (id),
+    day TEXT NOT NULL,
+    question_ids TEXT NOT NULL,
+    current INTEGER NOT NULL DEFAULT 0,
+    streak INTEGER NOT NULL DEFAULT 0,
+    score INTEGER NOT NULL DEFAULT 0,
+    started_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    ended TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS streak_runs_player_idx ON streak_runs (event_id, root_address, day)`,
+  `CREATE TABLE IF NOT EXISTS streak_answers (
+    run_id TEXT NOT NULL REFERENCES streak_runs (id),
+    idx INTEGER NOT NULL,
+    question_id TEXT NOT NULL,
+    flipped INTEGER NOT NULL,
+    issued_at INTEGER NOT NULL,
+    deadline INTEGER NOT NULL,
+    answered_at INTEGER,
+    choice INTEGER,
+    correct INTEGER,
+    points INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (run_id, idx)
+  )`,
+  // Winners, frozen once when the bounty closes, so a re-run pays the same people the same amount.
+  `CREATE TABLE IF NOT EXISTS streak_prizes (
+    event_id TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    root_address TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users (id),
+    score INTEGER NOT NULL,
+    amount_gd INTEGER NOT NULL,
+    tx_hash TEXT,
+    paid_at INTEGER,
+    PRIMARY KEY (event_id, rank)
+  )`,
   // Simulated balances for CHAIN_MODE=mock.
   `CREATE TABLE IF NOT EXISTS mock_balances (address TEXT PRIMARY KEY, wei TEXT NOT NULL)`,
   // Proactive jobs the user switched on: daily exam drills, opportunity scout, verification reminders.

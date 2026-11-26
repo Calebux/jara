@@ -153,7 +153,37 @@ export function serverConfig() {
       authToken: process.env.DATABASE_AUTH_TOKEN || undefined,
     },
     cronSecret: process.env.CRON_SECRET ?? '',
+    // Jara Streak, the campus bounty. Closed until STREAK_START_AT and STREAK_END_AT are set.
+    streak: {
+      eventId: process.env.STREAK_EVENT_ID || 'campus-streak-1',
+      startAt: time('STREAK_START_AT'),
+      endAt: time('STREAK_END_AT'),
+      // Friends who join from this moment earn extra runs (defaults to the start).
+      invitesFrom: time('STREAK_INVITES_FROM'),
+      // Each winner gets this many naira in G$, at the G$ price when the winners are frozen.
+      prizeNgn: num('STREAK_PRIZE_NGN', 5000),
+      winners: num('STREAK_WINNERS', 3),
+      runsPerDay: num('STREAK_RUNS_PER_DAY', 5),
+      runsPerFriend: num('STREAK_RUNS_PER_FRIEND', 3),
+      maxFriendRuns: num('STREAK_MAX_FRIEND_RUNS', 30),
+      // Double points windows: comma-separated start times, each lasting STREAK_GOLDEN_MINUTES.
+      goldenHours: (process.env.STREAK_GOLDEN_HOURS ?? '').split(',').map((s) => s.trim()).filter(Boolean).map((s, i) => timeValue(`STREAK_GOLDEN_HOURS[${i}]`, s)),
+      goldenMinutes: num('STREAK_GOLDEN_MINUTES', 15),
+      // Playing needs at least one Flowstate vote for Jara.
+      requireFlowstate: process.env.STREAK_REQUIRE_FLOWSTATE === 'true',
+    },
   }
+}
+
+/** An ISO date with offset (2026-11-28T00:00:00+01:00) or epoch milliseconds; 0 when unset. */
+function time(name: string): number {
+  const raw = process.env[name]
+  return raw ? timeValue(name, raw) : 0
+}
+function timeValue(name: string, raw: string): number {
+  const value = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw)
+  if (!Number.isFinite(value)) throw new Error(`${name} must be an ISO date or epoch milliseconds, got "${raw}"`)
+  return value
 }
 
 /** Test phone numbers are only accepted when no real money can move. */

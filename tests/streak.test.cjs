@@ -1,0 +1,195 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const { test, after } = require('node:test')
+const assert = require('node:assert/strict')
+const { mkdtempSync, rmSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { createHash } = require('node:crypto')
+const directory = mkdtempSync(`${tmpdir()}/jara-streak-`)
+const HOUR = 3_600_000
+Object.assign(process.env, {
+  DATABASE_URL: `file:${directory}/test.db`, CHAIN_MODE: 'mock', TOPUP_PROVIDER: 'mock', GD_NGN_RATE: '0.2', CRON_SECRET: 'cron',
+  STREAK_EVENT_ID: 'test-streak', STREAK_START_AT: String(Date.now() - HOUR), STREAK_END_AT: String(Date.now() + HOUR),
+  STREAK_PRIZE_NGN: '5000', STREAK_WINNERS: '3', STREAK_RUNS_PER_DAY: '5', STREAK_RUNS_PER_FRIEND: '3', STREAK_MAX_FRIEND_RUNS: '30',
+  STREAK_GOLDEN_HOURS: '', STREAK_GOLDEN_MINUTES: '15', STREAK_REQUIRE_FLOWSTATE: 'false',
+})
+const { db, run } = require('../src/lib/db.ts')
+const users = require('../src/lib/users.ts')
+const chain = require('../src/lib/chain.ts')
+const streak = require('../src/lib/streak/service.ts')
+const rules = require('../src/lib/streak/rules.ts')
+const { STREAK_QUESTIONS } = require('../src/lib/streak/questions.ts')
+const { CAMPUSES } = require('../src/lib/streak/campuses.ts')
+
+const rootFor = (seed) => `0x${createHash('sha256').update(seed).digest('hex').slice(0, 40)}`
+async function player(root, extra = {}) {
+  const user = await users.createUser()
+  await users.updateUser(user.id, { connected: true, rootAddress: root ?? rootFor(user.id) })
+  if (extra.referredBy) await run('UPDATE users SET referred_by = ? WHERE id = ?', [extra.referredBy, user.id])
+  return users.getUserById(user.id)
+}
+/** Test-only: reads the server's key to find the right (or wrong) option for the question in play. */
+async function choiceFor(view, right = true) {
+  const a = (await run('SELECT flipped FROM streak_answers WHERE run_id = ? AND idx = ?', [view.runId, view.question.index])).rows[0]
+  const correct = Number(a.flipped) ? 1 : 0
+  return right ? correct : 1 - correct
+}
+async function correctRun(user, n) {
+  let view = await streak.startRun(user)
+  for (let i = 0; i < n; i++) view = (await streak.answer(user, { runId: view.runId, index: view.question.index, choice: await choiceFor(view) })).run
+  return view
+}
+
+test('the bank: many distinct, well-formed questions, the right answer never hard-coded to one side', () => {
+  assert.ok(STREAK_QUESTIONS.length >= 300, `only ${STREAK_QUESTIONS.length} questions`)
+  assert.equal(new Set(STREAK_QUESTIONS.map((q) => q.id)).size, STREAK_QUESTIONS.length)
+  for (const q of STREAK_QUESTIONS) {
+    assert.equal(q.options.length, 2, q.id)
+    assert.notEqual(q.options[0].trim(), q.options[1].trim(), q.id)
+    assert.ok(q.prompt.trim().length > 3, q.id)
+  }
+  assert.ok(CAMPUSES.includes('UNILAG'))
+})
+
+test('scoring: faster scores more, combos multiply, Golden Hour doubles, the clock shrinks to 4s', () => {
+  assert.equal(rules.points(0, 7000, 1, false), 150)
+  assert.equal(rules.points(7000, 7000, 1, false), 100)
+  assert.equal(rules.points(0, 7000, 5, false), 300)
+  assert.equal(rules.points(0, 7000, 10, false), 450)
+  assert.equal(rules.points(0, 7000, 20, true), 1200)
+  assert.equal(rules.questionMs(0), 7000)
+  assert.equal(rules.questionMs(5), 6000)
+  assert.equal(rules.questionMs(50), 4000)
+  assert.equal(rules.lagosDay(Date.UTC(2026, 10, 27, 23, 30)), '2026-11-28') // 00:30 in Lagos
+})
+
+test('a run never reveals the answer, resumes instead of restarting, and one identity plays from one account', async () => {
+  const user = await player()
+  const view = await streak.startRun(user)
+  assert.equal(view.question.index, 0)
+  assert.equal(view.question.options.length, 2)
+  assert.equal(JSON.stringify(view).match(/flipped|correct/), null)
+  assert.equal((await streak.startRun(user)).runId, view.runId)
+  const second = await player(user.rootAddress)
+  await assert.rejects(streak.startRun(second), (err) => err.code === 'played_elsewhere')
+})
+
+test('right answers build the streak and score once; a wrong answer ends the run and the best run stays', async () => {
+  const user = await player()
+  let view = await streak.startRun(user)
+  const right = await choiceFor(view)
+  const first = await streak.answer(user, { runId: view.runId, index: 0, choice: right })
+  assert.equal(first.result.correct, true)
+  assert.ok(first.result.points >= 100 && first.result.points <= 150)
+  assert.equal(first.result.newBest, true)
+  // A double tap or retry of the same answer scores nothing more.
+  const replay = await streak.answer(user, { runId: view.runId, index: 0, choice: right })
+  assert.equal(replay.result, null)
+  assert.equal(replay.run.score, first.run.score)
+  view = first.run
+  for (let i = 0; i < 4; i++) view = (await streak.answer(user, { runId: view.runId, index: view.question.index, choice: await choiceFor(view) })).run
+  assert.equal(view.streak, 5)
+  const best = view.score
+  const wrong = await streak.answer(user, { runId: view.runId, index: view.question.index, choice: await choiceFor(view, false) })
+  assert.equal(wrong.result.correct, false)
+  assert.equal(wrong.run.finished, true)
+  assert.equal(wrong.run.ended, 'wrong')
+  assert.equal(wrong.run.score, best)
+  // A worse second run does not lower the best.
+  const next = await correctRun(user, 1)
+  await streak.answer(user, { runId: next.runId, index: next.question.index, choice: await choiceFor(next, false) })
+  const board = await streak.leaderboard(user)
+  assert.equal(board.you.score, best)
+  assert.equal(board.you.streak, 5)
+})
+
+test('running out of time ends the run, but not before the server’s own deadline', async () => {
+  const user = await player()
+  const view = await streak.startRun(user)
+  const early = await streak.answer(user, { runId: view.runId, index: 0, timeout: true })
+  assert.equal(early.result, null)
+  assert.equal(early.run.finished, false)
+  await run('UPDATE streak_answers SET deadline = ? WHERE run_id = ? AND idx = 0', [Date.now() - 5000, view.runId])
+  // Even a correct answer after the deadline (plus the network allowance) is too late.
+  const late = await streak.answer(user, { runId: view.runId, index: 0, choice: await choiceFor(view) })
+  assert.equal(late.result.timedOut, true)
+  assert.equal(late.run.finished, true)
+  assert.equal(late.run.ended, 'timeout')
+})
+
+test('five runs a day, then three more for each friend who joins with the link and verifies', async () => {
+  const user = await player()
+  for (let i = 0; i < 5; i++) {
+    const v = await streak.startRun(user)
+    await streak.answer(user, { runId: v.runId, index: 0, choice: await choiceFor(v, false) })
+  }
+  await assert.rejects(streak.startRun(user), (err) => err.code === 'no_runs')
+  // A friend who joined but has not verified does not count; one who did gives +3 runs.
+  const unverified = await users.createUser()
+  await run('UPDATE users SET referred_by = ? WHERE id = ?', [user.id, unverified.id])
+  await assert.rejects(streak.startRun(user), (err) => err.code === 'no_runs')
+  const friend = await player(undefined, { referredBy: user.id })
+  // The same person on a second account is still one friend.
+  await player(friend.rootAddress, { referredBy: user.id })
+  let home = await streak.streakHome(user)
+  assert.equal(home.runs.friends, 1)
+  assert.equal(home.runs.left, 3)
+  for (let i = 0; i < 3; i++) {
+    const v = await streak.startRun(user)
+    await streak.answer(user, { runId: v.runId, index: 0, choice: await choiceFor(v, false) })
+  }
+  await assert.rejects(streak.startRun(user), (err) => err.code === 'no_runs')
+  home = await streak.streakHome(user)
+  assert.equal(home.runs.left, 0)
+})
+
+test('Golden Hour doubles the points of a correct answer', async () => {
+  process.env.STREAK_GOLDEN_HOURS = String(Date.now() - 60_000)
+  try {
+    const user = await player()
+    const view = await streak.startRun(user)
+    const res = await streak.answer(user, { runId: view.runId, index: 0, choice: await choiceFor(view) })
+    assert.equal(res.result.golden, true)
+    assert.ok(res.result.points >= 200 && res.result.points <= 300)
+    assert.equal((await streak.streakHome(user)).event.golden.live, true)
+  } finally { process.env.STREAK_GOLDEN_HOURS = '' }
+})
+
+test('campus: picked once, and campuses rank by their players’ best scores', async () => {
+  const user = await player()
+  await streak.setCampus(user, 'UNILAG')
+  await assert.rejects(streak.setCampus(user, 'Atlantis'), (err) => err.status === 400)
+  await streak.setCampus(user, 'OAU (Ife)')
+  assert.equal((await streak.streakHome(user)).campus, 'UNILAG')
+  await correctRun(user, 2)
+  const board = await streak.leaderboard(null)
+  assert.ok(board.campuses.some((c) => c.campus === 'UNILAG' && c.score > 0))
+})
+
+test('the top 3 are paid G$ worth ₦5,000 each to their own wallet, exactly once, only after the end', async () => {
+  // Three clear leaders.
+  const leaders = []
+  for (const n of [12, 11, 10]) { const u = await player(); await correctRun(u, n); leaders.push(u) }
+  assert.equal((await streak.payWinners()).status, 'not_closed')
+  const balances = async () => Promise.all(leaders.map(async (u) => Number(await chain.gdBalance(u.rootAddress)) / 1e18))
+  const before = await balances()
+  process.env.STREAK_END_AT = String(Date.now() - 1000)
+  try {
+    const out = await streak.payWinners()
+    assert.equal(out.status, 'done')
+    assert.deepEqual(out.prizes.map((p) => p.status), ['paid', 'paid', 'paid'])
+    assert.equal(out.prizes[0].amountGd, 25_000) // ₦5,000 at ₦0.2 per G$
+    const board = await streak.leaderboard(null)
+    assert.deepEqual(board.top.slice(0, 3).map((p) => p.score), (await run("SELECT score FROM streak_prizes WHERE event_id = 'test-streak' ORDER BY rank")).rows.map((r) => Number(r.score)))
+    const winners = (await run("SELECT user_id FROM streak_prizes WHERE event_id = 'test-streak' ORDER BY rank")).rows.map((r) => r.user_id)
+    assert.deepEqual(winners, leaders.map((u) => u.id))
+    // Again (the cron runs every minute): nothing more is sent.
+    await streak.payWinners()
+    const afterBalances = await balances()
+    assert.deepEqual(afterBalances.map((b, i) => Math.round(b - before[i])), [25_000, 25_000, 25_000])
+    assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE type = 'reward' AND title LIKE '%Jara Streak%'")).rows[0].n, 3)
+    // No new runs once it has ended.
+    await assert.rejects(streak.startRun(leaders[0]), (err) => err.code === 'streak_closed')
+  } finally { process.env.STREAK_END_AT = String(Date.now() + HOUR) }
+})
+
+after(async () => { (await db()).close(); rmSync(directory, { recursive: true, force: true }) })

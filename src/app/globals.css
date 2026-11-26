@@ -120,3 +120,20 @@ body { background: var(--color-cream); color: var(--color-ink); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+/* Jara Streak: game feedback. Respects reduced motion. */
+@keyframes streak-shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+@keyframes streak-float { 0% { transform: translate(-50%, 0) scale(0.9); opacity: 0; } 15% { opacity: 1; transform: translate(-50%, -6px) scale(1.08); } 100% { transform: translate(-50%, -46px) scale(1); opacity: 0; } }
+@keyframes streak-glow { 0% { box-shadow: 0 0 0 0 #2f9e5a80; } 100% { box-shadow: 0 0 0 14px #2f9e5a00; } }
+@keyframes streak-flame { 0%, 100% { transform: scale(1) rotate(-3deg); } 50% { transform: scale(1.12) rotate(3deg); } }
+@keyframes streak-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes streak-rise { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.streak-shake { animation: streak-shake 0.42s ease; }
+.streak-float { animation: streak-float 0.9s ease-out forwards; }
+.streak-glow { animation: streak-glow 0.5s ease-out; }
+.streak-flame { display: inline-block; animation: streak-flame 0.9s ease-in-out infinite; }
+.streak-live { animation: streak-live 1.2s ease-in-out infinite; }
+.streak-rise { animation: streak-rise 0.3s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .streak-shake, .streak-float, .streak-glow, .streak-flame, .streak-live, .streak-rise { animation: none; }
+}
