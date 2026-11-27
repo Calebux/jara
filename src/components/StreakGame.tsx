@@ -2,12 +2,14 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ApiError, readApiResponse, responseMessage } from '@/lib/api-response'
 import { CAMPUSES } from '@/lib/streak/campuses'
 import { multiplier } from '@/lib/streak/rules'
 import type { StreakBoard, StreakHome, StreakRunView } from '@/lib/streak/service'
 import { Icon, type IconName } from './Icon'
 import { StreakAudio } from './streak-audio'
+import { useSheetDialog } from './useSheetDialog'
 
 // Jara Streak, the campus bounty: how many can you get right in a row? Two answers, one is right,
 // the clock gets shorter as the streak grows, one miss ends the run. The best run counts; the top 3
@@ -56,6 +58,7 @@ export function StreakGame() {
   const [shake, setShake] = useState(0)
   const [glow, setGlow] = useState(0)
   const [bestThisRun, setBestThisRun] = useState(false)
+  const [panel, setPanel] = useState<'how' | 'invite' | null>(null)
   const lock = useRef(false)
   const audio = useRef<StreakAudio | null>(null)
   const lastTick = useRef<number | null>(null)
@@ -260,19 +263,15 @@ export function StreakGame() {
       {toast && <div role="status" className="streak-rise fixed top-4 left-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl bg-ink px-4 py-3 text-center text-sm font-bold text-cream shadow-xl">{toast}</div>}
 
       {reveal || (playing && q) ? (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-          <div className="mx-auto w-full max-w-2xl min-w-0 lg:max-w-none">
-            {reveal
-              ? <PlayCard run={reveal.run} left={0} busy picked={reveal.choice} reveal={reveal} golden={false} float={null} shake={shake} glow={glow} onChoose={() => undefined} />
-              : <PlayCard run={run!} left={left} busy={busy} picked={picked} reveal={null} golden={Boolean(golden)} float={float} shake={shake} glow={glow} onChoose={(c) => void choose(c)} />}
-          </div>
-          <aside className="hidden min-w-0 lg:block">{board && <LiveBoard board={board} />}</aside>
+        <div className="mx-auto w-full max-w-2xl">
+          {reveal
+            ? <PlayCard run={reveal.run} left={0} busy picked={reveal.choice} reveal={reveal} golden={false} float={null} shake={shake} glow={glow} onChoose={() => undefined} />
+            : <PlayCard run={run!} left={left} busy={busy} picked={picked} reveal={null} golden={Boolean(golden)} float={float} shake={shake} glow={glow} onChoose={(c) => void choose(c)} />}
         </div>
       ) : (
-        <div className="grid gap-6">
-          {/* Phones: the result of the run comes first. Desktop shows it in the left column. */}
+        <div className="mx-auto grid w-full max-w-4xl gap-5">
           {run?.finished && event.phase !== 'off' && (
-            <div className="lg:hidden"><GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} /></div>
+            <GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} />
           )}
 
           <Hero home={home} serverNow={serverNow} golden={Boolean(golden)} busy={busy} canPlay={canPlay} runsLeft={runsLeft} showPlay={!run?.finished}
@@ -280,29 +279,26 @@ export function StreakGame() {
 
           {error && <p role="alert" className="rounded-xl bg-[#fde8e2] p-3 text-sm font-semibold text-[#8a2a12]">{error}</p>}
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
-            <div className="grid min-w-0 gap-6">
-              {run?.finished && event.phase !== 'off' && (
-                <div className="hidden lg:block"><GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} /></div>
+          {event.phase === 'closed' && home.prize && <ClaimCard home={home} onClaimed={(h) => { setHome(h); audio.current?.best() }} onError={setError} />}
+
+          <Setup home={home} />
+
+          {event.phase !== 'off' && (
+            <nav aria-label="Jara Streak" className="flex flex-wrap items-center justify-center gap-2">
+              <button type="button" onClick={() => setPanel('how')} className="app-button-secondary text-sm"><Icon name="sun" className="h-4 w-4" /> How it works</button>
+              <Link href="/app/streak/leaderboard" className="app-button-secondary text-sm">
+                <Icon name="chart" className="h-4 w-4" /> Leaderboard{board?.you?.rank ? <span className="font-semibold text-ink/50">· you’re #{board.you.rank}</span> : null}
+              </Link>
+              {event.phase !== 'closed' && home.connected && !home.playedElsewhere && home.inviteLink && (
+                <button type="button" onClick={() => setPanel('invite')} className="app-button-secondary text-sm"><Icon name="plus" className="h-4 w-4" /> Invite friends</button>
               )}
-              {event.phase === 'closed' && home.prize && <ClaimCard home={home} onClaimed={(h) => { setHome(h); audio.current?.best() }} onError={setError} />}
-              <Setup home={home} />
-              {event.phase !== 'closed' && <Rules home={home} />}
-            </div>
-            <aside className="grid min-w-0 gap-6">
-              {(event.phase === 'open' || event.phase === 'closed') && board && <LiveBoard board={board} />}
-              {event.phase === 'soon' && (
-                <section className="app-card p-6">
-                  <p className="grid h-10 w-10 place-items-center rounded-xl bg-[#f4f7ef] text-forest"><Icon name="chart" className="h-5 w-5" /></p>
-                  <h2 className="mt-4 text-base font-semibold tracking-tight">The leaderboard opens at the start</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-ink/55">Save your spot and invite friends now. Every friend who joins and verifies gives you extra runs.</p>
-                </section>
-              )}
-              {event.phase !== 'closed' && home.connected && !home.playedElsewhere && <InviteCard home={home} />}
-            </aside>
-          </div>
+            </nav>
+          )}
         </div>
       )}
+
+      {panel === 'how' && <Sheet title="How Jara Streak works" onClose={() => setPanel(null)}><Rules home={home} /></Sheet>}
+      {panel === 'invite' && <Sheet title="Invite friends, get more runs" onClose={() => setPanel(null)}><InviteBody home={home} /></Sheet>}
     </Shell>
   )
 }
@@ -423,7 +419,7 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
               <RunDots home={home} serverNow={serverNow} />
             </div>
           )}
-          {event.phase === 'closed' && <p className="mt-6 max-w-md text-sm text-cream/70">Thanks for playing. The final standings are on the right. Winners claim their prize here.</p>}
+          {event.phase === 'closed' && <p className="mt-6 max-w-md text-sm text-cream/70">Thanks for playing. Open the leaderboard for the final standings. Winners claim their prize here.</p>}
         </div>
 
         <div className="rounded-2xl bg-forest-deep/40 p-5 ring-1 ring-cream/10 sm:p-6 lg:self-start">
@@ -746,34 +742,6 @@ function PlayerRow({ p, board }: { p: StreakBoard['top'][number]; board: StreakB
   )
 }
 
-/** The live leaderboard panel beside the game. */
-function LiveBoard({ board }: { board: StreakBoard }) {
-  const top = board.top.slice(0, 8)
-  const closed = board.phase === 'closed'
-  return (
-    <section className="app-card overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-ink/5 px-5 py-4">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold tracking-tight">{closed ? 'Final standings' : 'Live leaderboard'}</h2>
-          <p className="mt-0.5 text-xs text-ink/50">{num(board.players)} player{board.players === 1 ? '' : 's'} · best run counts</p>
-        </div>
-        {!closed && board.playingNow > 0 && (
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#eef4e8] px-2.5 py-1 text-[11px] font-bold text-forest"><span className="streak-live h-1.5 w-1.5 rounded-full bg-[#2f9e5a]" />{board.playingNow} playing</span>
-        )}
-      </div>
-      {top.length === 0
-        ? <p className="px-5 py-8 text-center text-sm text-ink/50">No scores yet. The first run takes #1.</p>
-        : <ol className="grid gap-0.5 p-2">{top.map((p) => <PlayerRow key={p.rank} p={p} board={board} />)}</ol>}
-      {board.you?.rank && !top.some((p) => p.you) && (
-        <p className="mx-2 mb-2 rounded-xl bg-[#eef4e8] px-3 py-2.5 text-sm font-semibold">You’re #{board.you.rank} · {num(board.you.score)} pts{board.you.toPodium ? ` · ${num(board.you.toPodium)} to the top ${board.winners}` : ''}</p>
-      )}
-      <Link href="/app/streak/leaderboard" className="flex items-center justify-center gap-1.5 border-t border-ink/5 px-5 py-3.5 text-sm font-semibold text-forest hover:bg-[#f7f8f2]">
-        Full leaderboard and campuses <Icon name="arrow" className="h-4 w-4" />
-      </Link>
-    </section>
-  )
-}
-
 /** The leaderboard page: every player and every campus, live. */
 export function StreakLeaderboardPage() {
   const [board, setBoard] = useState<StreakBoard | null>(null)
@@ -837,24 +805,23 @@ export function StreakLeaderboardPage() {
   )
 }
 
-function InviteCard({ home }: { home: StreakHome }) {
+function InviteBody({ home }: { home: StreakHome }) {
   const [copied, setCopied] = useState(false)
   const r = home.runs
   if (!home.inviteLink) return null
   const text = `Jara Streak 🔥 How many can you get right in a row? The top ${home.event.winners} share a G$ ${num(home.event.prizePoolGd)} prize pool. Join with my link: ${home.inviteLink}`
   const maxed = r ? r.bonus >= r.maxFriendRuns : false
   return (
-    <section className="app-card p-5 sm:p-6">
-      <h2 className="text-lg font-semibold tracking-tight">Want more runs? Bring your friends</h2>
-      <p className="mt-1 text-sm text-ink/60">
+    <div>
+      <p className="text-sm leading-relaxed text-ink/60">
         Every friend who joins Jara with your link and verifies gives you <b className="text-ink">+{home.event.runsPerFriend} extra runs</b> on top of your refilling runs{r ? ` (up to +${r.maxFriendRuns})` : ''}.
       </p>
-      {r && r.friends > 0 && <p className="mt-2 text-sm font-bold text-forest">✓ {r.friends} friend{r.friends === 1 ? '' : 's'} joined · +{r.bonus} extra runs at a time{maxed ? ' (max)' : ''}</p>}
+      {r && r.friends > 0 && <p className="mt-3 text-sm font-semibold text-forest">✓ {r.friends} friend{r.friends === 1 ? '' : 's'} joined · +{r.bonus} extra runs at a time{maxed ? ' (max)' : ''}</p>}
       <div className="mt-4 grid grid-cols-2 gap-2">
         <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" className="app-button justify-center bg-forest text-cream hover:bg-forest-soft text-sm">WhatsApp</a>
         <button type="button" onClick={() => navigator.clipboard?.writeText(home.inviteLink!).then(() => setCopied(true), () => undefined)} className="app-button-secondary justify-center text-sm">{copied ? 'Link copied!' : 'Copy my link'}</button>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -870,9 +837,8 @@ function Rules({ home }: { home: StreakHome }) {
     ['star', 'Win the prize pool', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the top {event.winners} share G$ {num(event.prizePoolGd)}: {event.prizesGd.map((g, i) => <span key={i}>{i ? ', ' : ''}{PLACE[i] ?? `#${i + 1}`} G$ {num(g)}</span>)}. Winners tap Claim.</>],
   ]
   return (
-    <section className="app-card p-6 sm:p-7">
-      <h2 className="text-lg font-semibold tracking-tight">How it works</h2>
-      <ul className="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2">
+    <div>
+      <ul className="grid gap-5">
         {rows.map(([icon, title, text]) => (
           <li key={title} className="flex gap-3.5">
             <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#f4f7ef] text-forest"><Icon name={icon} className="h-[18px] w-[18px]" strokeWidth={2} /></span>
@@ -884,6 +850,25 @@ function Rules({ home }: { home: StreakHome }) {
         ))}
       </ul>
       <p className="mt-6 flex items-center gap-1.5 border-t border-ink/5 pt-4 text-xs font-medium text-ink/50"><Icon name="check" className="h-3.5 w-3.5" strokeWidth={3} /> One player per verified person. The clock and the answers live on Jara’s server, so it’s fair for everyone.</p>
-    </section>
+    </div>
+  )
+}
+
+/** A panel over the page: slides up on phones, centred on desktop. Esc or tapping outside closes it. */
+function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const ref = useSheetDialog(onClose)
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 sm:items-center sm:p-6" onClick={onClose}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} onClick={(e) => e.stopPropagation()}
+        className="streak-rise max-h-[88dvh] w-full overflow-y-auto rounded-t-3xl bg-white px-5 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] text-ink shadow-2xl outline-none sm:max-w-xl sm:rounded-3xl sm:p-7">
+        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-ink/15 sm:hidden" />
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-ink/5"><Icon name="x" className="h-5 w-5" /></button>
+        </div>
+        <div className="mt-5">{children}</div>
+      </div>
+    </div>,
+    document.body,
   )
 }

@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-// Jara Streak on the dashboard: a moving ticker before, during and after the bounty; while it is live,
-// a scoreboard-style "Play now" sits under the ticker. Shown for three days after it ends.
+// Jara Streak on the dashboard, in one spot: before it starts, a moving ticker (the announcement);
+// from the start, the ticker is replaced by a card with a big flame and the time left; after it
+// ends, the same card points to the results. Shown for three days after it ends.
 
 export type StreakBannerState = {
   phase: 'soon' | 'open' | 'closed'
@@ -63,37 +64,33 @@ export function StreakBanner({ streak }: { streak?: StreakBannerState }) {
   if (phase === 'soon') {
     return <Ticker badge="Soon" live={false} items={[`Jara Streak, the campus bounty, starts in ${left(streak.startAt - now)}`, pool, ...(perCorrect ? [perCorrect] : []), 'Invite your friends for extra runs']} />
   }
-  if (phase === 'closed') {
-    return <Ticker badge="Ended" live={false} items={['Jara Streak has ended. See the final leaderboard', 'Top 3: open the game to claim your prize', 'Thanks for playing']} />
-  }
-
-  // Live: the ticker keeps running, and under it a scoreboard-style call to play.
+  // From the start the ticker is gone; this card takes its place. While live it counts down to the
+  // end; afterwards it points to the results (and the winners' claim).
+  const closed = phase === 'closed'
   const c = clock(streak.endAt - now)
   const unit = 'ml-0.5 mr-2 text-sm font-medium text-cream/50'
   return (
-    <div className="grid gap-3">
-      <Ticker badge="Live" live items={[
-        golden ? 'Golden Hour is on: every point counts double' : `Jara Streak is live. Ends in ${left(streak.endAt - now)}`,
-        ...(goldenSoon ? [`Golden Hour starts in ${left(goldenSoon)}`] : []),
-        pool, ...(perCorrect ? [perCorrect] : []),
-      ]} />
-      <Link href="/app/streak" className="group streak-rings relative block overflow-hidden rounded-[22px] bg-forest text-cream">
+    <Link href="/app/streak" className="group streak-rings relative block overflow-hidden rounded-[22px] bg-forest text-cream">
         <div className="relative z-10 flex flex-wrap items-center gap-x-6 gap-y-4 px-5 py-5 sm:px-7">
           <span aria-hidden className="streak-flame text-[44px] leading-none">🔥</span>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">{golden ? 'Golden Hour · double points' : 'Live now'}</p>
-            <p className="mt-1 text-[22px] leading-tight font-semibold tracking-[-0.03em]">Jara Streak</p>
-            <p className="mt-0.5 text-sm text-cream/60">How many can you get right in a row?</p>
-          </div>
-          <div className="tabular-nums">
-            <p className="text-[11px] font-semibold text-cream/55">Ends in</p>
-            <p className="mt-0.5 text-[28px] leading-none font-semibold tracking-[-0.04em]">
-              {c.d > 0 && <>{c.d}<span className={unit}>d</span></>}{pad(c.h)}<span className={unit}>h</span>{pad(c.m)}<span className={unit}>m</span>{pad(c.s)}<span className="ml-0.5 text-sm font-medium text-cream/50">s</span>
+            <p className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em] text-crest uppercase">
+              {!closed && <span className="streak-live h-2 w-2 rounded-full bg-mandarin" />}
+              {closed ? 'Ended' : golden ? 'Golden Hour · double points' : goldenSoon ? `Live · Golden Hour in ${left(goldenSoon)}` : 'Live now'}
             </p>
+            <p className="mt-1 text-[22px] leading-tight font-semibold tracking-[-0.03em]">Jara Streak</p>
+            <p className="mt-0.5 truncate text-sm text-cream/60">{closed ? 'See the winners. Top 3: claim your prize.' : `${pool}${perCorrect ? ` · ${perCorrect}` : ''}`}</p>
           </div>
-          <span className="w-full rounded-xl bg-mandarin px-6 py-3 text-center text-sm font-bold text-white transition group-hover:bg-mandarin-deep sm:w-auto">Play now</span>
+          {!closed && (
+            <div className="tabular-nums">
+              <p className="text-[11px] font-semibold text-cream/55">Ends in</p>
+              <p className="mt-0.5 text-[28px] leading-none font-semibold tracking-[-0.04em]">
+                {c.d > 0 && <>{c.d}<span className={unit}>d</span></>}{pad(c.h)}<span className={unit}>h</span>{pad(c.m)}<span className={unit}>m</span>{pad(c.s)}<span className="ml-0.5 text-sm font-medium text-cream/50">s</span>
+              </p>
+            </div>
+          )}
+          <span className="w-full rounded-xl bg-mandarin px-6 py-3 text-center text-sm font-bold text-white transition group-hover:bg-mandarin-deep sm:w-auto">{closed ? 'See results' : 'Play now'}</span>
         </div>
-      </Link>
-    </div>
+    </Link>
   )
 }
