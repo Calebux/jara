@@ -113,7 +113,7 @@ export function StreakGame() {
       if (document.visibilityState !== 'visible') return
       void loadBoard()
       void loadHome().catch(() => undefined)
-    }, 20_000)
+    }, 10_000)
     return () => window.clearInterval(id)
   }, [playing, loadBoard, loadHome])
 
@@ -281,7 +281,7 @@ export function StreakGame() {
             <GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} />
           )}
 
-          <Hero home={home} serverNow={serverNow} golden={Boolean(golden)} busy={busy} canPlay={canPlay} runsLeft={runsLeft} showPlay={!run?.finished}
+          <Hero home={home} board={board} onOpenBoard={() => setPanel('board')} serverNow={serverNow} golden={Boolean(golden)} busy={busy} canPlay={canPlay} runsLeft={runsLeft} showPlay={!run?.finished}
             onPlay={(details) => void begin(details)} onJoined={(h) => setHome(h)} onError={setError} />
 
           {error && <p role="alert" className="rounded-xl bg-[#fde8e2] p-3 text-sm font-semibold text-[#8a2a12]">{error}</p>}
@@ -361,8 +361,8 @@ function RankBadge({ rank, onDark = false }: { rank: number; onDark?: boolean })
   return <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold tabular-nums ${tone}`}>{rank}</span>
 }
 
-function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPlay, onJoined, onError }: {
-  home: StreakHome; serverNow: number; golden: boolean; busy: boolean; canPlay: boolean; runsLeft: number; showPlay: boolean
+function Hero({ home, board, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPlay, onJoined, onError, onOpenBoard }: {
+  home: StreakHome; board: StreakBoard | null; serverNow: number; golden: boolean; busy: boolean; canPlay: boolean; runsLeft: number; showPlay: boolean; onOpenBoard: () => void
   onPlay: (details?: { campus?: string; name?: string }) => void; onJoined: (h: StreakHome) => void; onError: (e: string | null) => void
 }) {
   const { event } = home
@@ -375,6 +375,7 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
     )
   }
   const tease = event.golden.startsAt && !event.golden.live ? event.golden.startsAt - serverNow : null
+  const leaders = (event.phase === 'open' || event.phase === 'closed') && board ? board.top : null
   const refill = event.runWindowMinutes === 60 ? 'every hour' : event.runWindowMinutes % 60 === 0 ? `every ${event.runWindowMinutes / 60} hours` : `every ${event.runWindowMinutes} min`
   const stats: [string, string][] = [
     ['Per correct answer', event.perCorrectGd > 0 ? `G$ ${num(event.perCorrectGd)}` : 'Points only'],
@@ -436,19 +437,57 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
           {event.phase === 'closed' && <p className="mt-6 max-w-md text-sm text-cream/70">Thanks for playing. Open the leaderboard for the final standings. Winners claim their prize here.</p>}
         </div>
 
-        <div className="rounded-2xl bg-forest-deep/40 p-5 ring-1 ring-cream/10 sm:p-6 lg:self-start">
-          <p className="text-xs font-semibold text-cream/55">Prize pool</p>
-          <p className="mt-2 text-[42px] leading-none font-semibold tracking-[-0.05em] tabular-nums"><span className="mr-1.5 text-[22px] font-medium tracking-normal text-crest">G$</span>{num(event.prizePoolGd)}</p>
-          <p className="mt-2 text-xs leading-relaxed text-cream/50">Shared by the top {event.winners}. The higher you finish, the bigger your share.</p>
-          <ul className="mt-5 divide-y divide-cream/10 border-t border-cream/10">
-            {event.prizesGd.slice(0, 3).map((amount, i) => (
-              <li key={i} className="flex items-center justify-between gap-3 py-3">
-                <span className="flex items-center gap-3 text-sm font-semibold"><RankBadge rank={i + 1} onDark />{PLACE[i]} place</span>
-                <span className="text-sm font-semibold tabular-nums">G$ {num(amount)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {leaders ? (
+          <div className="rounded-2xl bg-forest-deep/40 p-5 ring-1 ring-cream/10 sm:p-6 lg:self-start">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-cream/55">{event.phase === 'closed' ? 'Winners' : 'Top 3 right now'}</p>
+              {event.phase === 'open' && <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] text-cream/70 uppercase"><span className="streak-live h-1.5 w-1.5 rounded-full bg-[#5fd18b]" />Live</span>}
+            </div>
+            <p className="mt-1 text-sm text-cream/60">Prize pool <span className="font-semibold text-cream tabular-nums">G$ {num(event.prizePoolGd)}</span></p>
+            <ol className="mt-4 divide-y divide-cream/10 border-t border-cream/10">
+              {Array.from({ length: Math.min(event.winners, 3) }, (_, i) => {
+                const p = leaders[i]
+                if (!p) {
+                  return (
+                    <li key={`open-${i}`} className="flex items-center gap-3 py-3 text-sm text-cream/40">
+                      <RankBadge rank={i + 1} onDark /> {event.phase === 'closed' ? 'No winner' : 'Open spot. Take it.'}
+                    </li>
+                  )
+                }
+                return (
+                  <li key={`${p.wallet}-${p.rank}`} className="streak-rise flex items-center gap-3 py-3">
+                    <RankBadge rank={p.rank} onDark />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm font-semibold">{p.name}{p.you ? ' (you)' : ''}</span>
+                        {event.phase === 'open' && p.live && <span className="streak-live h-1.5 w-1.5 shrink-0 rounded-full bg-[#5fd18b]" title="Playing now" />}
+                      </span>
+                      <span className="block truncate text-[11px] text-cream/50">{p.campus ?? p.wallet} · 🔥 {p.streak}</span>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums">{num(p.score)} <span className="text-xs font-medium text-cream/45">pts</span></span>
+                  </li>
+                )
+              })}
+            </ol>
+            <button type="button" onClick={onOpenBoard} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl bg-cream/10 px-4 py-2.5 text-sm font-semibold text-cream ring-1 ring-cream/15 transition hover:bg-cream/15">
+              See full leaderboard <Icon name="arrow" className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-forest-deep/40 p-5 ring-1 ring-cream/10 sm:p-6 lg:self-start">
+            <p className="text-xs font-semibold text-cream/55">Prize pool</p>
+            <p className="mt-2 text-[42px] leading-none font-semibold tracking-[-0.05em] tabular-nums"><span className="mr-1.5 text-[22px] font-medium tracking-normal text-crest">G$</span>{num(event.prizePoolGd)}</p>
+            <p className="mt-2 text-xs leading-relaxed text-cream/50">Shared by the top {event.winners}. The higher you finish, the bigger your share.</p>
+            <ul className="mt-5 divide-y divide-cream/10 border-t border-cream/10">
+              {event.prizesGd.slice(0, 3).map((amount, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex items-center gap-3 text-sm font-semibold"><RankBadge rank={i + 1} onDark />{PLACE[i]} place</span>
+                  <span className="text-sm font-semibold tabular-nums">G$ {num(amount)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <dl className="relative z-10 grid grid-cols-2 gap-px border-t border-cream/10 bg-cream/10 lg:grid-cols-4">
