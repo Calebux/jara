@@ -440,13 +440,14 @@ function Hero({ home, board, serverNow, golden, busy, canPlay, runsLeft, showPla
         {leaders ? (
           <div className="rounded-2xl bg-forest-deep/40 p-5 ring-1 ring-cream/10 sm:p-6 lg:self-start">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold text-cream/55">{event.phase === 'closed' ? 'Winners' : 'Top 3 right now'}</p>
+              <p className="text-xs font-semibold text-cream/55">{event.phase === 'closed' ? 'Winners · final standings' : 'Top 3 right now'}</p>
               {event.phase === 'open' && <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.12em] text-cream/70 uppercase"><span className="streak-live h-1.5 w-1.5 rounded-full bg-[#5fd18b]" />Live</span>}
             </div>
             <p className="mt-1 text-sm text-cream/60">Prize pool <span className="font-semibold text-cream tabular-nums">G$ {num(event.prizePoolGd)}</span></p>
             <ol className="mt-4 divide-y divide-cream/10 border-t border-cream/10">
               {Array.from({ length: Math.min(event.winners, 3) }, (_, i) => {
                 const p = leaders[i]
+                const won = event.phase === 'closed' && p ? board?.prizes.find((x) => x.rank === p.rank) : undefined
                 if (!p) {
                   return (
                     <li key={`open-${i}`} className="flex items-center gap-3 py-3 text-sm text-cream/40">
@@ -462,9 +463,18 @@ function Hero({ home, board, serverNow, golden, busy, canPlay, runsLeft, showPla
                         <span className="truncate text-sm font-semibold">{p.name}{p.you ? ' (you)' : ''}</span>
                         {event.phase === 'open' && p.live && <span className="streak-live h-1.5 w-1.5 shrink-0 rounded-full bg-[#5fd18b]" title="Playing now" />}
                       </span>
-                      <span className="block truncate text-[11px] text-cream/50">{p.campus ?? p.wallet} · 🔥 {p.streak}</span>
+                      <span className="block truncate text-[11px] text-cream/50">{p.campus ?? p.wallet} · 🔥 {p.streak}{won ? ` · ${num(p.score)} pts` : ''}</span>
                     </span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums">{num(p.score)} <span className="text-xs font-medium text-cream/45">pts</span></span>
+                    {won ? (
+                      <span className="shrink-0 text-right">
+                        <span className="block text-sm font-semibold text-crest tabular-nums">G$ {num(won.amountGd)}</span>
+                        <span className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] font-bold tracking-wide uppercase ${won.claimed ? 'text-[#5fd18b]' : 'text-cream/45'}`}>
+                          {won.claimed && <Icon name="check" className="h-3 w-3" strokeWidth={3} />}{won.claimed ? 'Claimed' : 'To claim'}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">{num(p.score)} <span className="text-xs font-medium text-cream/45">pts</span></span>
+                    )}
                   </li>
                 )
               })}
