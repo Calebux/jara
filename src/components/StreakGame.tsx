@@ -58,7 +58,11 @@ export function StreakGame() {
   const [shake, setShake] = useState(0)
   const [glow, setGlow] = useState(0)
   const [bestThisRun, setBestThisRun] = useState(false)
-  const [panel, setPanel] = useState<'how' | 'invite' | null>(null)
+  const [panel, setPanel] = useState<'how' | 'invite' | 'board' | null>(null)
+  const closePanel = useCallback(() => {
+    setPanel(null)
+    if (window.location.search.includes('view=')) window.history.replaceState(null, '', window.location.pathname)
+  }, [])
   const lock = useRef(false)
   const audio = useRef<StreakAudio | null>(null)
   const lastTick = useRef<number | null>(null)
@@ -91,7 +95,10 @@ export function StreakGame() {
     request<StreakHome>('/api/streak')
       .then((h) => { if (!active) return; setHome(h); setSkew(h.event.serverNow - Date.now()); if (h.run) setRun(h.run) })
       .catch((e) => { if (active) setError(responseMessage(e)) })
-    const board = window.setTimeout(() => void loadBoard(), 0)
+    const board = window.setTimeout(() => {
+      void loadBoard()
+      if (new URLSearchParams(window.location.search).get('view') === 'leaderboard') setPanel('board')
+    }, 0)
     const player = audio
     return () => { active = false; window.clearTimeout(board); player.current?.stop() }
   }, [loadBoard])
@@ -286,9 +293,9 @@ export function StreakGame() {
           {event.phase !== 'off' && (
             <nav aria-label="Jara Streak" className="flex flex-wrap items-center justify-center gap-2">
               <button type="button" onClick={() => setPanel('how')} className="app-button-secondary text-sm"><Icon name="sun" className="h-4 w-4" /> How it works</button>
-              <Link href="/app/streak/leaderboard" className="app-button-secondary text-sm">
+              <button type="button" onClick={() => setPanel('board')} className="app-button-secondary text-sm">
                 <Icon name="chart" className="h-4 w-4" /> Leaderboard{board?.you?.rank ? <span className="font-semibold text-ink/50">· you’re #{board.you.rank}</span> : null}
-              </Link>
+              </button>
               {event.phase !== 'closed' && home.connected && !home.playedElsewhere && home.inviteLink && (
                 <button type="button" onClick={() => setPanel('invite')} className="app-button-secondary text-sm"><Icon name="plus" className="h-4 w-4" /> Invite friends</button>
               )}
@@ -297,8 +304,15 @@ export function StreakGame() {
         </div>
       )}
 
-      {panel === 'how' && <Sheet title="How Jara Streak works" onClose={() => setPanel(null)}><Rules home={home} /></Sheet>}
-      {panel === 'invite' && <Sheet title="Invite friends, get more runs" onClose={() => setPanel(null)}><InviteBody home={home} /></Sheet>}
+      {panel === 'board' && (
+        <Sheet title="Leaderboard" onClose={closePanel}>
+          <LeaderboardBody
+            playLabel={canPlay && home.campus && runsLeft > 0 ? 'Play Jara Streak' : 'Back to the game'}
+            onPlay={() => { closePanel(); if (canPlay && home.campus && runsLeft > 0) void begin() }} />
+        </Sheet>
+      )}
+      {panel === 'how' && <Sheet title="How Jara Streak works" onClose={closePanel}><Rules home={home} /></Sheet>}
+      {panel === 'invite' && <Sheet title="Invite friends, get more runs" onClose={closePanel}><InviteBody home={home} /></Sheet>}
     </Shell>
   )
 }
@@ -479,9 +493,10 @@ function PlayCard({ run, left, busy, picked, reveal, golden, float, shake, glow,
       {/* The streak itself is the hero: a big flame and count, not a chip in a corner. */}
       <div className="relative min-h-[78px]">
         <div className="absolute top-0 left-0">
-          <p className="text-[10px] font-bold tracking-[0.14em] text-ink/40 uppercase">Score</p>
+          <p className="text-[10px] font-bold tracking-[0.14em] text-ink/40 uppercase">Points</p>
           <p key={`glow-${glow}`} className="streak-glow -ml-1 rounded-lg px-1 text-2xl leading-none font-bold tabular-nums">{num(run.score)}</p>
-          {run.earnedGd > 0 && <p className="mt-1 text-[11px] font-bold text-forest">G$ {num(run.earnedGd)} earned</p>}
+          <p className="mt-1.5 text-[10px] font-bold tracking-[0.14em] text-ink/40 uppercase">G$ earned</p>
+          <p className="text-sm leading-none font-bold text-forest tabular-nums">G$ {num(run.earnedGd)}</p>
         </div>
         <div className="absolute top-0 right-0 flex items-center gap-1.5">
           {golden && <span className="rounded-full bg-mandarin px-2.5 py-1 text-xs font-bold text-white">⚡ ×2</span>}
@@ -540,7 +555,7 @@ function StreakBurst({ float }: { float: Float }) {
       ))}
       <span className={`streak-burst absolute left-0 grid min-w-28 justify-items-center rounded-2xl px-4 py-2 text-center shadow-lg ${float.golden ? 'bg-mandarin text-white ring-2 ring-crest' : hot ? 'bg-mandarin text-white' : 'bg-forest text-cream'}`}>
         <span className="flex items-center gap-1 text-2xl leading-none font-black"><span className="streak-flame">🔥</span>{float.gd > 0 ? `+${num(float.gd)}` : `+${num(float.points)}`}</span>
-        <span className="mt-1 text-[11px] leading-none font-bold whitespace-nowrap opacity-90">{float.gd > 0 ? `G$ · ${float.streak} in a row` : `pts · ${float.streak} in a row`}{float.golden ? ' · ⚡×2' : ''}</span>
+        <span className="mt-1 text-[11px] leading-none font-bold whitespace-nowrap opacity-90">{float.gd > 0 ? `G$ earned · +${num(float.points)} pts` : `points · ${float.streak} in a row`}{float.golden ? ' · ⚡×2' : ''}</span>
       </span>
     </span>
   )
@@ -556,7 +571,7 @@ function GameOver({ run, best, home, board, busy, serverNow, onAgain }: { run: S
       <div className="bg-[#f4f5ef] px-5 py-5 text-center sm:px-6">
         <p className="text-sm font-bold text-ink/60">{title}</p>
         <p className="mt-2 text-5xl leading-none font-bold tracking-tight tabular-nums">{num(run.score)}</p>
-        <p className="mt-1 text-sm font-semibold text-ink/55">points · 🔥 {run.streak} in a row</p>
+        <p className="mt-1 text-sm font-semibold text-ink/55">points for the leaderboard · 🔥 {run.streak} in a row</p>
         {run.earnedGd > 0 && <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2 text-sm font-bold text-forest">You earned G$ {num(run.earnedGd)} this run. {run.paid ? 'It’s in your wallet.' : 'It’s on its way to your wallet.'}</p>}
         {best && run.score > 0 ? <p className="mt-3 inline-block rounded-full bg-mandarin px-3 py-1 text-sm font-bold text-white">New personal best</p>
           : home.best && home.best.score > 0 && <p className="mt-3 text-sm font-semibold text-ink/60">Your best: {num(home.best.score)} pts</p>}
@@ -735,73 +750,81 @@ function PlayerRow({ p, board }: { p: StreakBoard['top'][number]; board: StreakB
         </span>
       </span>
       <span className="shrink-0 text-right">
-        <span className="block text-sm font-semibold tabular-nums">{num(p.score)}</span>
+        <span className="block text-sm font-semibold tabular-nums">{num(p.score)} <span className="text-xs font-medium text-ink/45">pts</span></span>
         {prize && <span className="block text-[11px] font-semibold text-ink/45 tabular-nums">wins G$ {num(board.prizesGd[p.rank - 1] ?? 0)}</span>}
       </span>
     </li>
   )
 }
 
-/** The leaderboard page: every player and every campus, live. */
-export function StreakLeaderboardPage() {
+/** The leaderboard pop-up: every player (scrolls, however many) and every campus, live. */
+function LeaderboardBody({ playLabel, onPlay }: { playLabel: string; onPlay: () => void }) {
   const [board, setBoard] = useState<StreakBoard | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'players' | 'campuses'>('players')
   useEffect(() => {
-    const get = () => request<StreakBoard>('/api/streak/leaderboard?limit=50').then((b) => { setBoard(b); setError(null) }, (e) => setError(responseMessage(e)))
+    const get = () => request<StreakBoard>('/api/streak/leaderboard?limit=200').then((b) => { setBoard(b); setError(null) }, (e) => setError(responseMessage(e)))
     const first = window.setTimeout(() => void get(), 0)
     const id = window.setInterval(() => { if (document.visibilityState === 'visible') void get() }, 10_000)
     return () => { window.clearTimeout(first); window.clearInterval(id) }
   }, [])
-  const tabClass = (t: string) => `rounded-full px-3 py-1.5 text-xs font-bold ${tab === t ? 'bg-forest text-cream' : 'text-ink/60 hover:bg-ink/5'}`
+  const tabClass = (t: string) => `flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${tab === t ? 'bg-white text-ink shadow-sm' : 'text-ink/55 hover:text-ink'}`
+  if (!board) return <p role="status" className="py-10 text-center text-sm text-ink/55">{error ?? 'Loading the leaderboard…'}</p>
   return (
-    <Shell title="Leaderboard">
-      <section className="overflow-hidden rounded-[22px] bg-forest p-5 text-cream sm:p-6">
-        <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">
-          {board?.phase === 'open' ? <><span className="streak-live mr-1.5 inline-block h-2 w-2 rounded-full bg-mandarin align-middle" />Live · updates every few seconds</> : board?.phase === 'closed' ? 'Final standings' : 'Campus bounty'}
-        </p>
-        <h1 className="mt-1 text-[30px] leading-tight font-bold tracking-[-0.04em]">Jara Streak leaderboard 🏆</h1>
-        {board && <p className="mt-1 text-sm text-cream/80">{num(board.players)} player{board.players === 1 ? '' : 's'}{board.playingNow > 0 ? ` · ${board.playingNow} playing now` : ''} · Top {board.winners} share G$ {num(board.prizePoolGd)}</p>}
-        {board?.phase !== 'closed' && <Link href="/app/streak" className="app-button mt-4 w-full justify-center bg-mandarin text-white hover:bg-mandarin-deep min-h-12 text-sm">Play Jara Streak 🔥</Link>}
-      </section>
-      {error && !board && <p role="alert" className="rounded-xl bg-[#fde8e2] p-3 text-sm font-semibold text-[#8a2a12]">{error}</p>}
-      {!board ? <div className="app-card p-6"><p role="status" className="text-sm font-semibold text-ink/55">Loading the leaderboard…</p></div> : (
-        <section className="app-card p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold tracking-tight">{tab === 'players' ? 'Players' : 'Campuses'}</h2>
-            <div className="flex gap-1 rounded-full bg-[#f4f5ef] p-1">
-              <button className={tabClass('players')} onClick={() => setTab('players')}>Players</button>
-              <button className={tabClass('campuses')} onClick={() => setTab('campuses')}>Campuses</button>
-            </div>
-          </div>
-          {tab === 'players' ? (
-            board.top.length === 0 ? <p className="mt-4 rounded-xl bg-[#f7f8f2] p-4 text-center text-sm font-semibold text-ink/55">No scores yet. The first run takes #1 🥇</p> : (
-              <ol className="mt-4 grid gap-1.5">{board.top.map((p) => <PlayerRow key={p.rank} p={p} board={board} />)}</ol>
-            )
-          ) : (
-            board.campuses.length === 0 ? <p className="mt-4 rounded-xl bg-[#f7f8f2] p-4 text-center text-sm font-semibold text-ink/55">No campus on the board yet.</p> : (
-              <ol className="mt-4 grid gap-1.5">
-                {board.campuses.map((c) => (
-                  <li key={c.campus} className="flex items-center gap-3 rounded-xl px-3 py-2.5 odd:bg-[#f7f8f2]">
-                    <RankBadge rank={c.rank} />
-                    <span className="min-w-0 flex-1 truncate text-sm font-bold">{c.campus} <span className="font-semibold text-ink/45">· {c.players} player{c.players === 1 ? '' : 's'}</span></span>
-                    <span className="shrink-0 text-sm font-bold tabular-nums">{num(c.score)}</span>
-                  </li>
-                ))}
-              </ol>
-            )
-          )}
-          {tab === 'players' && board.you?.rank && !board.top.some((p) => p.you) && (
-            <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2.5 text-sm font-bold">You’re #{board.you.rank} · {num(board.you.score)} pts{board.you.toPodium ? ` · ${num(board.you.toPodium)} to the top ${board.winners}` : ''}</p>
-          )}
-          <p className="mt-3 text-xs font-semibold text-ink/50">
-            {board.phase === 'closed'
-              ? board.prizes.length ? (`🏆 Winners confirmed: ${board.prizes.map((p) => `${PLACE[p.rank - 1] ?? `#${p.rank}`} G$ ${num(p.amountGd)}`).join(' · ')}. ${board.prizes.every((p) => p.claimed) ? 'All prizes claimed.' : 'Winners: open Jara Streak to claim your prize.'}`) : 'Final scores. Prizes go out shortly.'
-              : `Each player’s best run counts. 🔥 is their longest streak. Campuses add up their players’ best runs.`}
-          </p>
-        </section>
+    <div>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink/55">
+        {board.phase === 'open' && <span className="flex items-center gap-1.5 font-semibold text-forest"><span className="streak-live h-2 w-2 rounded-full bg-[#2f9e5a]" />Live</span>}
+        {board.phase === 'closed' && <span className="font-semibold text-forest">Final standings</span>}
+        <span>{num(board.players)} player{board.players === 1 ? '' : 's'}</span>
+        {board.phase === 'open' && board.playingNow > 0 && <span>· {board.playingNow} playing now</span>}
+      </p>
+
+      <div className="sticky top-0 z-10 -mx-1 mt-4 bg-white px-1 py-2">
+        <div className="flex gap-1 rounded-full bg-[#f1f3ee] p-1" role="tablist">
+          <button role="tab" aria-selected={tab === 'players'} className={tabClass('players')} onClick={() => setTab('players')}>Players</button>
+          <button role="tab" aria-selected={tab === 'campuses'} className={tabClass('campuses')} onClick={() => setTab('campuses')}>Campuses</button>
+        </div>
+      </div>
+
+      {tab === 'players' ? (
+        board.top.length === 0 ? <p className="py-10 text-center text-sm text-ink/50">No scores yet. The first run takes #1.</p> : (
+          <ol className="mt-1 grid gap-0.5">{board.top.map((p) => <PlayerRow key={p.rank} p={p} board={board} />)}</ol>
+        )
+      ) : (
+        board.campuses.length === 0 ? <p className="py-10 text-center text-sm text-ink/50">No campus on the board yet.</p> : (
+          <ol className="mt-1 grid gap-0.5">
+            {board.campuses.map((c) => (
+              <li key={c.campus} className="flex items-center gap-3 rounded-xl px-3 py-2.5">
+                <RankBadge rank={c.rank} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{c.campus}</span>
+                  <span className="block text-[11px] font-medium text-ink/45">{c.players} player{c.players === 1 ? '' : 's'}</span>
+                </span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums">{num(c.score)} <span className="text-xs font-medium text-ink/45">pts</span></span>
+              </li>
+            ))}
+          </ol>
+        )
       )}
-    </Shell>
+
+      {tab === 'players' && board.you?.rank && !board.top.some((p) => p.you) && (
+        <p className="mt-3 rounded-xl bg-[#eef4e8] px-3 py-2.5 text-sm font-semibold">You’re #{board.you.rank} · {num(board.you.score)} pts{board.you.toPodium ? ` · ${num(board.you.toPodium)} to the top ${board.winners}` : ''}</p>
+      )}
+
+      <p className="mt-5 border-t border-ink/5 pt-4 text-xs leading-relaxed text-ink/50">
+        {board.phase === 'closed' && board.prizes.length
+          ? `Winners: ${board.prizes.map((p) => `${PLACE[p.rank - 1] ?? `#${p.rank}`} G$ ${num(p.amountGd)}`).join(' · ')}. ${board.prizes.every((p) => p.claimed) ? 'All prizes claimed.' : 'Winners: claim your prize on the game page.'}`
+          : tab === 'players'
+            ? `Ranked by points from each player’s best run. 🔥 is their longest streak. Points decide the ranking; G$ is earned separately (G$ for every correct answer).`
+            : 'Each campus adds up its players’ best runs.'}
+      </p>
+
+      {board.phase !== 'closed' && (
+        <div className="sticky bottom-0 z-10 -mx-5 mt-4 border-t border-ink/5 bg-white px-5 pt-3 pb-1 sm:-mx-7 sm:px-7">
+          <button type="button" onClick={onPlay} className="app-button min-h-12 w-full justify-center bg-mandarin text-sm text-white hover:bg-mandarin-deep">{playLabel}</button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -828,6 +851,7 @@ function InviteBody({ home }: { home: StreakHome }) {
 function Rules({ home }: { home: StreakHome }) {
   const { event } = home
   const rows: [IconName, string, React.ReactNode][] = [
+    ['chart', 'Points and G$ are different', <><b className="font-semibold text-ink">Points</b> decide your place on the leaderboard: each correct answer gives 100 to 150 (faster is more), multiplied by your combo and by Golden Hour. That’s why scores reach the thousands. <b className="font-semibold text-ink">G$</b> is real money{event.perCorrectGd > 0 ? `: G$ ${num(event.perCorrectGd)} for every correct answer, however many points it scored` : ''}.</>],
     ['bolt', 'Answer fast', <>Two answers, one is right. You get 7 seconds, a little less as your streak grows.</>],
     ['x', 'One miss ends the run', <>A wrong answer, or running out of time, ends it. Then go again.</>],
     ['flame', 'Build combos', <>5 in a row ×2, 10 in a row ×3, 20 in a row ×4. Faster answers score more.</>],

@@ -1,8 +1,6 @@
-import type { Metadata } from 'next'
-import { StreakLeaderboardPage } from '@/components/StreakGame'
+import { redirect } from 'next/navigation'
 
-export const metadata: Metadata = { title: 'Jara Streak leaderboard — Campus Bounty' }
-
+// The leaderboard is a pop-up on the game page now; old links open it there.
 export default function StreakLeaderboard() {
-  return <StreakLeaderboardPage />
+  redirect('/app/streak?view=leaderboard')
 }
