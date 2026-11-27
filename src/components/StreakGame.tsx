@@ -617,7 +617,7 @@ function JoinForm({ home, busy, onJoin }: { home: StreakHome; busy: boolean; onJ
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const needsName = !home.name
-  const ready = Boolean(campus) && (!needsName || name.trim().length >= 2)
+  const ready = campus.trim().length >= 2 && (!needsName || name.trim().length >= 2)
   const field = 'min-h-12 w-full rounded-xl border-0 bg-white px-3 font-semibold text-ink'
   return (
     <form className="mt-5 grid gap-2.5 rounded-2xl bg-cream/10 p-4 ring-1 ring-cream/15" onSubmit={async (e) => {
@@ -632,11 +632,9 @@ function JoinForm({ home, busy, onJoin }: { home: StreakHome; busy: boolean; onJ
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} autoComplete="given-name" placeholder="e.g. Tolu A." className={field} />
         </label>
       )}
-      <label className="grid gap-1 text-xs font-bold text-cream/75">Your school (you can only pick once)
-        <select value={campus} onChange={(e) => setCampus(e.target.value)} className={field}>
-          <option value="">Choose your school…</option>
-          {CAMPUSES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+      <label className="grid gap-1 text-xs font-bold text-cream/75">Your school (type it, or pick from the list — set once)
+        <input list="streak-campuses" value={campus} onChange={(e) => setCampus(e.target.value)} maxLength={40} autoComplete="off" placeholder="e.g. UNILAG, or your school's name" className={field} />
+        <datalist id="streak-campuses">{CAMPUSES.map((c) => <option key={c} value={c} />)}</datalist>
       </label>
       <button type="submit" disabled={!ready || saving || busy} className="app-button mt-1 min-h-14 w-full justify-center bg-mandarin text-base text-white hover:bg-mandarin-deep disabled:opacity-60">
         {saving || busy ? 'One moment…' : home.event.phase === 'open' ? 'Let’s play 🔥' : 'Save my spot'}

@@ -6,7 +6,7 @@ import { serverConfig } from '../env'
 import { withUserLock } from '../jars'
 import { ensureRefCode, getUserById, type User } from '../users'
 import { authorizedUser } from '../wallet-authorization'
-import { isCampus } from './campuses'
+import { cleanCampus } from './campuses'
 import * as gate from './gate'
 import { STREAK_QUESTIONS, type StreakQuestion } from './questions'
 import { lagosDay, multiplier, points, questionMs } from './rules'
@@ -199,9 +199,10 @@ async function join(user: User, cfg: Config, root: string, details: { campus?: u
   await run('INSERT OR IGNORE INTO streak_players (event_id, root_address, user_id, created_at) VALUES (?, ?, ?, ?)', [cfg.eventId, root, user.id, Date.now()])
   const p = (await getPlayer(cfg.eventId, root))!
   if (p.user_id !== user.id) throw new StreakError('This GoodDollar identity already plays from another Jara account. One player per person.', 409, 'played_elsewhere')
-  if (!p.campus && isCampus(details.campus)) {
-    await run('UPDATE streak_players SET campus = ? WHERE event_id = ? AND root_address = ? AND campus IS NULL', [details.campus, cfg.eventId, root])
-    p.campus = details.campus
+  const campus = cleanCampus(details.campus)
+  if (!p.campus && campus) {
+    await run('UPDATE streak_players SET campus = ? WHERE event_id = ? AND root_address = ? AND campus IS NULL', [campus, cfg.eventId, root])
+    p.campus = campus
   }
   const name = cleanName(details.name)
   if (name && !user.name?.trim()) await run("UPDATE users SET name = ? WHERE id = ? AND (name IS NULL OR TRIM(name) = '')", [name, user.id])
@@ -211,7 +212,7 @@ async function join(user: User, cfg: Config, root: string, details: { campus?: u
 /** Sign up for the bounty: school (required, once) and, if the account has none, a name. */
 export async function joinStreak(input: User, details: { campus?: unknown; name?: unknown }) {
   const cfg = streakConfig()
-  if (!isCampus(details.campus)) throw new StreakError('Pick your school from the list.', 400, 'needs_campus')
+  if (!cleanCampus(details.campus)) throw new StreakError('Add your school (2–40 letters).', 400, 'needs_campus')
   if (!input.name?.trim() && !cleanName(details.name)) throw new StreakError('Add the name you want on the leaderboard (2–30 letters).', 400, 'needs_name')
   const root = connectedRoot(input)
   const user = await authorizedUser(input)

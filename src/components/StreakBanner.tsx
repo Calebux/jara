@@ -31,6 +31,28 @@ export function StreakBanner({ streak }: { streak?: StreakBannerState }) {
   if (phase === 'closed' && now > streak.endAt + 3 * 86_400_000) return null
   const pool = `G$ ${streak.prizePoolGd.toLocaleString('en-US')} prize pool`
   const golden = streak.golden.live && streak.golden.endsAt && now < streak.golden.endsAt
+
+  // Before it starts: a slim moving ticker (an announcement), not the full banner. The banner with
+  // "Play" only appears once it is live.
+  if (phase === 'soon') {
+    const perCorrect = streak.perCorrectGd > 0 ? ` · G$ ${streak.perCorrectGd} for every correct answer` : ''
+    const msg = `🔥 Jara Streak — the campus bounty starts in ${left(streak.startAt - now)} · ${pool}, top ${streak.winners} win big${perCorrect} · invite your friends for extra runs · get ready`
+    return (
+      <Link href="/app/streak" aria-label={`Jara Streak starts in ${left(streak.startAt - now)}. Tap for details.`}
+        className="group block overflow-hidden rounded-2xl bg-forest text-cream">
+        <div className="flex items-center gap-2 py-2.5 pr-3 pl-2.5">
+          <span className="shrink-0 rounded-full bg-mandarin px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-white uppercase">Soon</span>
+          <div className="relative min-w-0 flex-1 overflow-hidden" aria-hidden>
+            <div className="streak-ticker-track text-sm font-semibold text-cream/90">
+              <span className="pr-10">{msg}</span><span className="pr-10">{msg}</span>
+            </div>
+          </div>
+          <span className="shrink-0 text-sm font-bold text-crest">Details →</span>
+        </div>
+      </Link>
+    )
+  }
+
   return (
     <Link href="/app/streak" className="group streak-rings relative block overflow-hidden rounded-[22px] bg-forest text-cream transition hover:bg-forest-soft">
       <div className="relative z-10 flex items-center gap-4 p-5 sm:px-6">
@@ -39,13 +61,12 @@ export function StreakBanner({ streak }: { streak?: StreakBannerState }) {
           <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">
             {golden ? <span className="text-mandarin">⚡ Golden Hour — double points now</span>
               : phase === 'open' ? <><span className="streak-live mr-1.5 inline-block h-2 w-2 rounded-full bg-mandarin align-middle" />Live · ends in {left(streak.endAt - now)}</>
-              : phase === 'soon' ? `Campus bounty · starts in ${left(streak.startAt - now)}`
               : 'Campus bounty · ended'}
           </p>
           <p className="mt-0.5 text-lg leading-snug font-bold">Jara Streak</p>
           <p className="truncate text-sm text-cream/70">{phase === 'closed' ? 'See the winners and claim your prize.' : `${pool}${streak.perCorrectGd > 0 ? ` · G$ ${streak.perCorrectGd} per correct answer` : ''}`}</p>
         </div>
-        <span className="hidden shrink-0 rounded-xl bg-mandarin px-4 py-2.5 text-sm font-bold text-white group-hover:bg-mandarin-deep sm:block">{phase === 'open' ? 'Play →' : phase === 'soon' ? 'Details →' : 'Results →'}</span>
+        <span className="hidden shrink-0 rounded-xl bg-mandarin px-4 py-2.5 text-sm font-bold text-white group-hover:bg-mandarin-deep sm:block">{phase === 'open' ? 'Play →' : 'Results →'}</span>
       </div>
     </Link>
   )

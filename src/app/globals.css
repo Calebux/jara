@@ -148,3 +148,9 @@ body { background: var(--color-cream); color: var(--color-ink); }
 /* Jara Streak: forest surfaces echo the balance card's faint rings (campaign, not a redesign). */
 .streak-rings::before, .streak-rings::after { content: ''; position: absolute; border: 1px solid #ffffff10; border-radius: 50%; right: -110px; top: -100px; width: 330px; height: 330px; pointer-events: none; }
 .streak-rings::after { width: 460px; height: 460px; right: -175px; top: -165px; }
+
+/* Jara Streak: before it starts, a moving announcement ticker (pauses on hover; still if reduced motion). */
+@keyframes streak-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.streak-ticker-track { display: inline-flex; flex-shrink: 0; white-space: nowrap; will-change: transform; animation: streak-ticker 26s linear infinite; }
+.group:hover .streak-ticker-track { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .streak-ticker-track { animation: none; } }

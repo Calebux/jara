@@ -166,7 +166,10 @@ test('Golden Hour doubles the points of a correct answer', async () => {
 
 test('campus: picked once, and campuses rank by their players’ best scores', async () => {
   const user = await player(undefined, { campus: 'UNILAG' })
-  await assert.rejects(streak.joinStreak(user, { campus: 'Atlantis' }), (err) => err.status === 400)
+  // Any typed school is accepted (the list is only suggestions); only empty/garbage is rejected.
+  await assert.rejects(streak.joinStreak(user, { campus: '!' }), (err) => err.code === 'needs_campus')
+  const custom = await player(undefined, { campus: 'Some Small Private Uni' })
+  assert.equal((await streak.streakHome(custom)).campus, 'Some Small Private Uni')
   await streak.joinStreak(user, { campus: 'OAU (Ife)' })
   assert.equal((await streak.streakHome(user)).campus, 'UNILAG')
   await correctRun(user, 2)
