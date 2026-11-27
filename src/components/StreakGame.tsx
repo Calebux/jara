@@ -621,7 +621,7 @@ function GameOver({ run, best, home, board, busy, serverNow, onAgain }: { run: S
         <p className="text-sm font-bold text-ink/60">{title}</p>
         <p className="mt-2 text-5xl leading-none font-bold tracking-tight tabular-nums">{num(run.score)}</p>
         <p className="mt-1 text-sm font-semibold text-ink/55">points for the leaderboard · 🔥 {run.streak} in a row</p>
-        {run.earnedGd > 0 && <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2 text-sm font-bold text-forest">You earned G$ {num(run.earnedGd)} this run. {run.paid ? 'It’s in your wallet.' : 'It’s on its way to your wallet.'}</p>}
+        {run.earnedGd > 0 && <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2 text-sm font-bold text-forest">You earned G$ {num(run.earnedGd)} this run. {run.paid ? 'It’s in your wallet' : 'It’s on its way to your wallet'}, ready to spend in Jara on airtime, data, electricity or Jara AI.</p>}
         {best && run.score > 0 ? <p className="mt-3 inline-block rounded-full bg-mandarin px-3 py-1 text-sm font-bold text-white">New personal best</p>
           : home.best && home.best.score > 0 && <p className="mt-3 text-sm font-semibold text-ink/60">Your best: {num(home.best.score)} pts</p>}
         {you?.rank && (
@@ -670,10 +670,10 @@ function ClaimCard({ home, onClaimed, onError }: { home: StreakHome; onClaimed: 
       <span className={`grid h-12 w-12 place-items-center rounded-full text-lg font-bold tabular-nums ${MEDAL_TONE[prize.rank - 1] ?? 'bg-cream/10 text-cream'}`}>{prize.rank}</span>
       <h2 className="mt-2 text-2xl font-bold tracking-tight">You finished #{prize.rank}{home.name ? `, ${home.name.split(' ')[0]}` : ''}!</h2>
       {prize.claimed ? (
-        <p className="mt-1 font-semibold">✓ Claimed. <b>G$ {num(prize.amountGd)}</b> is in your wallet. Buy airtime or data in Jara, or cash out to your bank.</p>
+        <p className="mt-1 font-semibold">✓ Claimed. <b>G$ {num(prize.amountGd)}</b> is in your wallet. Spend it in Jara on airtime, data, electricity or Jara AI.</p>
       ) : (
         <>
-          <p className="mt-1 font-semibold">Your share of the prize pool: <b>G$ {num(prize.amountGd)}</b>. Claim it and it goes straight to your wallet.</p>
+          <p className="mt-1 font-semibold">Your share of the prize pool: <b>G$ {num(prize.amountGd)}</b>. Claim it, then spend it in Jara on airtime, data, electricity or Jara AI.</p>
           <button onClick={() => void claim()} disabled={busy} className="app-button mt-4 min-h-14 w-full justify-center bg-mandarin text-base text-white hover:bg-mandarin-deep disabled:opacity-60">
             {busy ? 'Sending to your wallet…' : `Claim G$ ${num(prize.amountGd)}`}
           </button>
@@ -908,6 +908,7 @@ function Rules({ home }: { home: StreakHome }) {
     ['undo', 'Runs refill', <>{event.runsPerWindow} runs at a time that come back as time passes. Only your best run counts.</>],
     ['sparkle', 'Golden Hours', <>Announced windows when every point counts double. Follow Jara’s socials.</>],
     ['star', 'Win the prize pool', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the top {event.winners} share G$ {num(event.prizePoolGd)}: {event.prizesGd.map((g, i) => <span key={i}>{i ? ', ' : ''}{PLACE[i] ?? `#${i + 1}`} G$ {num(g)}</span>)}. Winners tap Claim.</>],
+    ['jar', 'Spend it in Jara', <>All the G$ you win, from answers and prizes, is for using in Jara: airtime, data, electricity or Jara AI.</>],
   ]
   return (
     <div>
