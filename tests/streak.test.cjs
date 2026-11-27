@@ -20,6 +20,8 @@ const streak = require('../src/lib/streak/service.ts')
 const rules = require('../src/lib/streak/rules.ts')
 const { STREAK_QUESTIONS } = require('../src/lib/streak/questions.ts')
 const { CAMPUSES } = require('../src/lib/streak/campuses.ts')
+const generated = require('../src/lib/streak/generated.ts')
+const { randomInt } = require('node:crypto')
 
 const rootFor = (seed) => `0x${createHash('sha256').update(seed).digest('hex').slice(0, 40)}`
 async function player(root, extra = {}) {
@@ -43,7 +45,7 @@ async function correctRun(user, n) {
 }
 
 test('the bank: many distinct, well-formed questions, the right answer never hard-coded to one side', () => {
-  assert.ok(STREAK_QUESTIONS.length >= 300, `only ${STREAK_QUESTIONS.length} questions`)
+  assert.ok(STREAK_QUESTIONS.length >= 1000, `only ${STREAK_QUESTIONS.length} questions`)
   assert.equal(new Set(STREAK_QUESTIONS.map((q) => q.id)).size, STREAK_QUESTIONS.length)
   for (const q of STREAK_QUESTIONS) {
     assert.equal(q.options.length, 2, q.id)
@@ -51,6 +53,37 @@ test('the bank: many distinct, well-formed questions, the right answer never har
     assert.ok(q.prompt.trim().length > 3, q.id)
   }
   assert.ok(CAMPUSES.includes('UNILAG'))
+  // The original ids never change (runs in progress point at them).
+  assert.equal(STREAK_QUESTIONS[0].id, 'music-1')
+  assert.ok(STREAK_QUESTIONS.some((q) => q.id === 'maths-20'))
+  // No question is written twice.
+  const keys = STREAK_QUESTIONS.map((q) => `${q.prompt}|${q.options[0]}`.toLowerCase())
+  assert.equal(new Set(keys).size, keys.length)
+})
+
+test('generated questions: always valid, rebuilt exactly from their id, and the right answer is really right', () => {
+  const kinds = new Set()
+  for (let i = 0; i < 5000; i++) {
+    const id = generated.randomGenerated(randomInt)
+    const q = generated.generatedQuestion(id)
+    assert.ok(q, id)
+    assert.notEqual(q.options[0], q.options[1], id)
+    assert.deepEqual(generated.generatedQuestion(id), q)
+    const [, kind, ...n] = id.split(':'); const v = n.map(Number); kinds.add(kind)
+    const num = (x) => Number(String(x).replace(/[^0-9.]/g, ''))
+    if (kind === 'mul') assert.equal(num(q.options[0]), v[0] * v[1], id)
+    if (kind === 'ord') assert.equal(num(q.options[0]), v[0] + v[1] * v[2], id)
+    if (kind === 'sq') assert.equal(num(q.options[0]), v[0] * v[0], id)
+    if (kind === 'pct') assert.equal(num(q.options[0]), (v[0] * v[1]) / 100, id)
+    if (kind === 'seq') assert.equal(num(q.options[0]), v[0] + 4 * v[1], id)
+    if (kind === 'chg') { assert.equal(num(q.options[0]), v[0] - v[1], id); assert.ok(num(q.options[1]) < v[0], id) }
+    if (kind === 'unit') assert.equal(num(q.options[0]), v[2] * v[1], id)
+    if (kind === 'frac') { const [a, b, c, d] = v; const big = a / b > c / d ? `${a}/${b}` : `${c}/${d}`; assert.equal(q.options[0], big, id) }
+    if (kind === 'cap') assert.equal(q.options[0], generated.COUNTRIES[v[0]][1], id)
+  }
+  assert.ok(kinds.size >= 15, `only ${kinds.size} kinds`)
+  // Forged or broken ids are refused, never shown.
+  for (const bad of ['gen:mul:7:8:56', 'gen:nope:1:2', 'gen:cap:9999:1', 'gen:mul:x:y:z', 'music-1']) assert.equal(generated.generatedQuestion(bad), null, bad)
 })
 
 test('scoring: faster scores more, combos multiply, Golden Hour doubles, the clock shrinks to 4s', () => {
@@ -81,6 +114,26 @@ test('a run never reveals the answer, resumes instead of restarting, and one ide
   const joined = await streak.joinStreak(fresh, { campus: 'UNILAG', name: 'Ada Obi' })
   assert.equal(joined.campus, 'UNILAG')
   assert.equal(joined.name, 'Ada Obi')
+})
+
+test('a run lines up 300 different questions: unseen written ones first, every 4th one generated', async () => {
+  const user = await player()
+  const view = await streak.startRun(user)
+  const ids = JSON.parse(String((await run('SELECT question_ids FROM streak_runs WHERE id = ?', [view.runId])).rows[0].question_ids))
+  assert.equal(ids.length, streak.RUN_QUESTIONS)
+  assert.equal(new Set(ids).size, ids.length)
+  ids.forEach((id, i) => assert.equal(id.startsWith('gen:'), (i + 1) % streak.GENERATED_EVERY === 0, `${i}: ${id}`))
+  // Generated questions play like any other: answer the first one correctly.
+  let v = view
+  for (let i = 0; i < 4; i++) v = (await streak.answer(user, { runId: v.runId, index: v.question.index, choice: await choiceFor(v) })).run
+  assert.equal(v.streak, 4)
+  // The next run puts questions already seen this event at the back.
+  await streak.answer(user, { runId: v.runId, index: v.question.index, choice: await choiceFor(v, false) })
+  const seen = new Set((await run('SELECT question_id FROM streak_answers WHERE run_id = ?', [view.runId])).rows.map((r) => String(r.question_id)))
+  const next = await streak.startRun(user)
+  const nextIds = JSON.parse(String((await run('SELECT question_ids FROM streak_runs WHERE id = ?', [next.runId])).rows[0].question_ids))
+  const written = nextIds.filter((id) => !id.startsWith('gen:'))
+  assert.ok(written.slice(0, 200).every((id) => !seen.has(id)), 'unseen questions come first')
 })
 
 test('right answers build the streak and score once; a wrong answer ends the run and the best run stays', async () => {
