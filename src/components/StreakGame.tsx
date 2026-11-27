@@ -267,7 +267,7 @@ export function StreakGame() {
       ) : (
         <>
           {run?.finished && event.phase !== 'off' && (
-            <GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} onAgain={() => void begin()} />
+            <GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} />
           )}
 
           <Hero home={home} serverNow={serverNow} golden={Boolean(golden)} busy={busy} canPlay={canPlay} runsLeft={runsLeft} showPlay={!run?.finished}
@@ -404,9 +404,9 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
         {event.phase === 'open' && canPlay && showPlay && home.campus && (
           <div className="mt-5">
             <button onClick={() => onPlay()} disabled={busy || runsLeft <= 0} className="app-button min-h-14 w-full justify-center bg-mandarin text-base text-white hover:bg-mandarin-deep disabled:opacity-60">
-              {busy ? 'Starting…' : runsLeft > 0 ? (home.best?.runs ? 'Play again' : 'Start playing') : 'No runs left today'}
+              {busy ? 'Starting…' : runsLeft > 0 ? (home.best?.runs ? 'Play again' : 'Start playing') : (home.runs?.nextAt ? `Next run in ${Math.max(1, Math.ceil((home.runs.nextAt - serverNow) / 60_000))} min` : 'Out of runs for now')}
             </button>
-            <RunDots home={home} />
+            <RunDots home={home} serverNow={serverNow} />
           </div>
         )}
         {event.phase === 'closed' && <p className="mt-4 text-sm font-semibold text-cream/80">Thanks for playing! The final leaderboard is below. Winners get their prize in their wallet automatically.</p>}
@@ -415,15 +415,17 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
   )
 }
 
-function RunDots({ home }: { home: StreakHome }) {
+function RunDots({ home, serverNow }: { home: StreakHome; serverNow: number }) {
   const r = home.runs
   if (!r) return null
+  const dots = Math.min(r.perWindow, 8)
+  const mins = r.nextAt ? Math.max(1, Math.ceil((r.nextAt - serverNow) / 60_000)) : 0
   return (
     <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs font-semibold text-cream/75">
-      <span className="flex gap-1" aria-label={`${r.freeLeft} of ${r.perDay} daily runs left`}>
-        {Array.from({ length: r.perDay }, (_, i) => <span key={i} className={`h-2.5 w-2.5 rounded-full ${i < r.freeLeft ? 'bg-mandarin' : 'bg-cream/20'}`} />)}
+      <span className="flex gap-1" aria-hidden>
+        {Array.from({ length: dots }, (_, i) => <span key={i} className={`h-2.5 w-2.5 rounded-full ${i < Math.min(r.left, dots) ? 'bg-mandarin' : 'bg-cream/20'}`} />)}
       </span>
-      <span>{r.freeLeft} of {r.perDay} runs left today{r.bonusLeft > 0 ? ` · +${r.bonusLeft} invite run${r.bonusLeft === 1 ? '' : 's'}` : ''}</span>
+      <span>{r.left > 0 ? `${r.left} run${r.left === 1 ? '' : 's'} ready${r.bonus > 0 ? ` · +${r.bonus} from invites` : ''} · they refill over time` : `Next run in ${mins} min${mins === 1 ? '' : 's'}`}</span>
     </div>
   )
 }
@@ -510,7 +512,7 @@ function StreakBurst({ float }: { float: Float }) {
   )
 }
 
-function GameOver({ run, best, home, board, busy, onAgain }: { run: StreakRunView; best: boolean; home: StreakHome; board: StreakBoard | null; busy: boolean; onAgain: () => void }) {
+function GameOver({ run, best, home, board, busy, serverNow, onAgain }: { run: StreakRunView; best: boolean; home: StreakHome; board: StreakBoard | null; busy: boolean; serverNow: number; onAgain: () => void }) {
   const you = board?.you
   const runsLeft = home.runs?.left ?? 0
   const title = run.ended === 'timeout' ? '⏰ Time’s up!' : run.ended === 'wrong' ? 'Run over!' : run.ended === 'cleared' ? '🤯 You answered every question!' : run.ended === 'closed' ? 'The bounty has ended' : 'Run over'
@@ -533,7 +535,7 @@ function GameOver({ run, best, home, board, busy, onAgain }: { run: StreakRunVie
       <div className="grid gap-2.5 p-5 sm:px-6">
         {home.event.phase === 'open' && (
           <button onClick={onAgain} disabled={busy || runsLeft <= 0} className="app-button min-h-12 justify-center bg-mandarin text-sm text-white hover:bg-mandarin-deep disabled:opacity-60">
-            {busy ? 'Starting…' : runsLeft > 0 ? `Play again · ${runsLeft} run${runsLeft === 1 ? '' : 's'} left` : 'No runs left today. Invite a friend for more'}
+            {busy ? 'Starting…' : runsLeft > 0 ? `Play again · ${runsLeft} run${runsLeft === 1 ? '' : 's'} ready` : (home.runs?.nextAt ? `Next run in ${Math.max(1, Math.ceil((home.runs.nextAt - serverNow) / 60_000))} min — invite a friend for more now` : 'Out of runs — invite a friend for more')}
           </button>
         )}
         <div className="grid grid-cols-2 gap-2">
@@ -764,14 +766,14 @@ function InviteCard({ home }: { home: StreakHome }) {
   const r = home.runs
   if (!home.inviteLink) return null
   const text = `Jara Streak 🔥 How many can you get right in a row? The top ${home.event.winners} share a G$ ${num(home.event.prizePoolGd)} prize pool. Join with my link: ${home.inviteLink}`
-  const maxed = r ? r.friendRuns >= r.maxFriendRuns : false
+  const maxed = r ? r.bonus >= r.maxFriendRuns : false
   return (
     <section className="app-card p-5 sm:p-6">
       <h2 className="text-lg font-bold">Want more runs? Bring your friends</h2>
       <p className="mt-1 text-sm text-ink/60">
-        Every friend who joins Jara with your link and verifies gives you <b className="text-ink">+{home.event.runsPerFriend} runs</b>{r ? ` (up to ${r.maxFriendRuns})` : ''}.
+        Every friend who joins Jara with your link and verifies gives you <b className="text-ink">+{home.event.runsPerFriend} extra runs</b> on top of your refilling runs{r ? ` (up to +${r.maxFriendRuns})` : ''}.
       </p>
-      {r && r.friends > 0 && <p className="mt-2 text-sm font-bold text-forest">✓ {r.friends} friend{r.friends === 1 ? '' : 's'} joined · {r.friendRuns} bonus runs earned{maxed ? ' (max)' : ''}</p>}
+      {r && r.friends > 0 && <p className="mt-2 text-sm font-bold text-forest">✓ {r.friends} friend{r.friends === 1 ? '' : 's'} joined · +{r.bonus} extra runs at a time{maxed ? ' (max)' : ''}</p>}
       <div className="mt-4 grid grid-cols-2 gap-2">
         <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" className="app-button justify-center bg-forest text-cream hover:bg-forest-soft text-sm">WhatsApp</a>
         <button type="button" onClick={() => navigator.clipboard?.writeText(home.inviteLink!).then(() => setCopied(true), () => undefined)} className="app-button-secondary justify-center text-sm">{copied ? 'Link copied!' : 'Copy my link'}</button>
@@ -787,7 +789,7 @@ function Rules({ home }: { home: StreakHome }) {
     ['💥', <>One wrong answer, or running out of time, ends your run.</>],
     ...(event.perCorrectGd > 0 ? [['💰', <>Earn <b>G$ {num(event.perCorrectGd)} for every correct answer</b> (up to G$ {num(event.dailyCapGd)} a day), sent to your wallet after each run.</>] as [string, React.ReactNode]] : []),
     ['🔥', <>Combos: <b>5 in a row ×2</b>, 10 in a row ×3, 20 in a row ×4. Faster answers score more.</>],
-    ['🎯', <><b>{event.runsPerDay} runs a day</b> (resets at midnight). Only your best run counts on the leaderboard.</>],
+    ['🎯', <>Plenty of runs: <b>{event.runsPerWindow} at a time</b> that refill as time passes, so you’re never locked out for long. Only your best run counts.</>],
     ['⚡', <><b>Golden Hours</b>: surprise windows when every point counts double. Follow Jara’s socials so you don’t miss them.</>],
     ['🏆', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the <b>top {event.winners}</b> share the <b>G$ {num(event.prizePoolGd)} prize pool</b>: {event.prizesGd.map((g, i) => <span key={i}>{i ? ', ' : ''}<b>{['1st', '2nd', '3rd'][i] ?? `#${i + 1}`} G$ {num(g)}</b></span>)}. Winners tap <b>Claim</b> and it goes to their wallet. Buy airtime or data in Jara, or cash out to your bank.</>],
   ]

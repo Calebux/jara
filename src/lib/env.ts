@@ -172,7 +172,10 @@ export function serverConfig() {
       perCorrectGd: num('STREAK_PER_CORRECT_GD', 20),
       poolCapGd: num('STREAK_POOL_CAP_GD', 0),
       dailyCapGd: num('STREAK_DAILY_CAP_GD', 400),
-      runsPerDay: num('STREAK_RUNS_PER_DAY', 5),
+      // Free runs refill on a rolling window: STREAK_RUNS_PER_WINDOW every STREAK_RUN_WINDOW_MINUTES,
+      // so nobody is locked out for long. Inviting friends adds permanent capacity.
+      runsPerWindow: num('STREAK_RUNS_PER_WINDOW', 10),
+      runWindowMinutes: num('STREAK_RUN_WINDOW_MINUTES', 60),
       runsPerFriend: num('STREAK_RUNS_PER_FRIEND', 3),
       maxFriendRuns: num('STREAK_MAX_FRIEND_RUNS', 30),
       // Double points windows: comma-separated start times, each lasting STREAK_GOLDEN_MINUTES.

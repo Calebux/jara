@@ -18,8 +18,9 @@ import { lagosDay, multiplier, points, questionMs } from './rules'
 // combo (x2 from 5 in a row, x3 from 10, x4 from 20), doubled during a Golden Hour.
 //
 // One player per verified identity (root wallet) per event, whichever Jara account it plays from.
-// Each player gets STREAK_RUNS_PER_DAY runs a day (Lagos time), plus STREAK_RUNS_PER_FRIEND for every
-// friend who joins with their link and verifies. The leaderboard keeps each player's best run; it is
+// Runs refill on a rolling window: up to STREAK_RUNS_PER_WINDOW runs within any
+// STREAK_RUN_WINDOW_MINUTES, coming back as older runs age out, plus STREAK_RUNS_PER_FRIEND more for
+// every friend who joins with their link and verifies. The leaderboard keeps each player's best run; it is
 // updated on every correct answer, so a run that is abandoned still counts for what it scored.
 //
 // Every correct answer also earns STREAK_PER_CORRECT_GD (G$ 20 by default), credited the moment it is answered
@@ -49,7 +50,8 @@ export function streakConfig() {
     : s.endAt <= s.startAt ? 'STREAK_END_AT must be after STREAK_START_AT'
     : !whole(s.prizePoolGd) ? 'STREAK_PRIZE_POOL_GD must be a whole number of G$'
     : s.prizeSplit.length < 1 || s.prizeSplit.length > 20 || !s.prizeSplit.every((x) => whole(x) && x > 0) || s.prizeSplit.reduce((a, b) => a + b, 0) !== 100 ? 'STREAK_PRIZE_SPLIT must be whole percentages for 1st, 2nd, 3rd… that add up to 100 (e.g. 40,35,25)'
-    : !whole(s.runsPerDay) || s.runsPerDay < 1 ? 'STREAK_RUNS_PER_DAY must be at least 1'
+    : !whole(s.runsPerWindow) || s.runsPerWindow < 1 ? 'STREAK_RUNS_PER_WINDOW must be at least 1'
+    : !(s.runWindowMinutes > 0) ? 'STREAK_RUN_WINDOW_MINUTES must be greater than 0'
     : !whole(s.runsPerFriend) || !whole(s.maxFriendRuns) ? 'STREAK_RUNS_PER_FRIEND and STREAK_MAX_FRIEND_RUNS must be whole numbers'
     : !(s.goldenMinutes > 0 && s.goldenMinutes <= 180) ? 'STREAK_GOLDEN_MINUTES must be 1–180'
     : !whole(s.perCorrectGd) || !whole(s.poolCapGd) || !whole(s.dailyCapGd) ? 'STREAK_PER_CORRECT_GD, STREAK_POOL_CAP_GD and STREAK_DAILY_CAP_GD must be whole numbers'
@@ -162,18 +164,23 @@ async function friendsJoined(user: User, cfg: Config): Promise<number> {
   [user.id, mine, cfg.invitesFrom, user.id])).rows[0].n)
 }
 
-/** Runs left right now: today's free runs, then runs earned by inviting friends (usable any day). */
+/**
+ * Runs available right now. Free runs refill on a rolling window: you may start up to
+ * STREAK_RUNS_PER_WINDOW runs within any STREAK_RUN_WINDOW_MINUTES, and as older runs age out of
+ * that window they come back — so nobody is ever locked out for long. Inviting friends adds capacity.
+ */
 async function allowance(user: User, cfg: Config, now = Date.now()) {
   const root = user.rootAddress?.toLowerCase() ?? ''
-  const byDay = (await run('SELECT day, COUNT(*) AS n FROM streak_runs WHERE event_id = ? AND root_address = ? GROUP BY day', [cfg.eventId, root])).rows
-  const today = lagosDay(now)
-  const usedToday = Number(byDay.find((d) => d.day === today)?.n ?? 0)
-  const friendRunsUsed = byDay.reduce((sum, d) => sum + Math.max(0, Number(d.n) - cfg.runsPerDay), 0)
+  const windowMs = cfg.runWindowMinutes * 60_000
+  const recent = (await run('SELECT started_at FROM streak_runs WHERE event_id = ? AND root_address = ? AND started_at >= ? ORDER BY started_at', [cfg.eventId, root, now - windowMs])).rows.map((r) => Number(r.started_at))
   const friends = await friendsJoined(user, cfg)
-  const friendRuns = Math.min(cfg.maxFriendRuns, friends * cfg.runsPerFriend)
-  const freeLeft = Math.max(0, cfg.runsPerDay - usedToday)
-  const bonusLeft = Math.max(0, friendRuns - friendRunsUsed)
-  return { perDay: cfg.runsPerDay, usedToday, freeLeft, bonusLeft, left: freeLeft + bonusLeft, friends, friendRuns, runsPerFriend: cfg.runsPerFriend, maxFriendRuns: cfg.maxFriendRuns }
+  const bonus = Math.min(cfg.maxFriendRuns, friends * cfg.runsPerFriend)
+  const capacity = cfg.runsPerWindow + bonus
+  const used = recent.length
+  const left = Math.max(0, capacity - used)
+  // When none are left, the next one unlocks as the oldest run in the window ages out.
+  const nextAt = left > 0 || used < capacity ? null : recent[used - capacity] + windowMs
+  return { capacity, perWindow: cfg.runsPerWindow, windowMinutes: cfg.runWindowMinutes, used, left, bonus, friends, runsPerFriend: cfg.runsPerFriend, maxFriendRuns: cfg.maxFriendRuns, nextAt }
 }
 
 async function activeRun(cfg: Config, root: string) {
@@ -233,7 +240,10 @@ export async function startRun(input: User, body: { campus?: unknown; name?: unk
     const live = await activeRun(cfg, root)
     if (live) return runView(live.id)
     const left = await allowance(user, cfg)
-    if (left.left <= 0) throw new StreakError(left.friendRuns < left.maxFriendRuns ? 'No runs left today. Invite a friend for more, or come back tomorrow.' : 'No runs left today. Come back tomorrow.', 409, 'no_runs')
+    if (left.left <= 0) {
+      const mins = left.nextAt ? Math.max(1, Math.ceil((left.nextAt - Date.now()) / 60_000)) : cfg.runWindowMinutes
+      throw new StreakError(`You've used your runs for now — another unlocks in about ${mins} minute${mins === 1 ? '' : 's'}${left.bonus < left.maxFriendRuns ? ', or invite a friend for more right away' : ''}.`, 409, 'no_runs')
+    }
     const now = Date.now()
     const r: RunRow = { id: randomUUID(), event_id: cfg.eventId, root_address: root, user_id: user.id, day: lagosDay(now), question_ids: JSON.stringify(await questionOrder(cfg.eventId, root)), current: 0, streak: 0, score: 0, started_at: now, finished_at: null, ended: null }
     await atomic(async (tx) => {
@@ -386,7 +396,8 @@ export async function streakHome(user: User | null) {
       prizePoolGd: cfg.prizePoolGd,
       prizesGd: prizesGd(cfg),
       winners: cfg.winners,
-      runsPerDay: cfg.runsPerDay,
+      runsPerWindow: cfg.runsPerWindow,
+      runWindowMinutes: cfg.runWindowMinutes,
       runsPerFriend: cfg.runsPerFriend,
       goldenMinutes: cfg.goldenMinutes,
       perCorrectGd: answerGdOn(cfg) ? cfg.perCorrectGd : 0,

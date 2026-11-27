@@ -9,7 +9,7 @@ const HOUR = 3_600_000
 Object.assign(process.env, {
   DATABASE_URL: `file:${directory}/test.db`, CHAIN_MODE: 'mock', TOPUP_PROVIDER: 'mock', GD_NGN_RATE: '0.2', CRON_SECRET: 'cron',
   STREAK_EVENT_ID: 'test-streak', STREAK_START_AT: String(Date.now() - HOUR), STREAK_END_AT: String(Date.now() + HOUR),
-  STREAK_PRIZE_POOL_GD: '100000', STREAK_PRIZE_SPLIT: '40,35,25', STREAK_RUNS_PER_DAY: '5', STREAK_RUNS_PER_FRIEND: '3', STREAK_MAX_FRIEND_RUNS: '30',
+  STREAK_PRIZE_POOL_GD: '100000', STREAK_PRIZE_SPLIT: '40,35,25', STREAK_RUNS_PER_WINDOW: '5', STREAK_RUN_WINDOW_MINUTES: '60', STREAK_RUNS_PER_FRIEND: '3', STREAK_MAX_FRIEND_RUNS: '30',
   STREAK_GOLDEN_HOURS: '', STREAK_GOLDEN_MINUTES: '15', STREAK_REQUIRE_FLOWSTATE: 'false',
   STREAK_PER_CORRECT_GD: '20', STREAK_POOL_CAP_GD: '100000', STREAK_DAILY_CAP_GD: '100',
 })
@@ -126,7 +126,7 @@ test('running out of time ends the run, but not before the server’s own deadli
   assert.equal(late.run.ended, 'timeout')
 })
 
-test('five runs a day, then three more for each friend who joins with the link and verifies', async () => {
+test('runs refill: 5 at a time, +3 per verified friend, and used runs come back as time passes', async () => {
   const user = await player()
   for (let i = 0; i < 5; i++) {
     const v = await streak.startRun(user)
@@ -147,9 +147,17 @@ test('five runs a day, then three more for each friend who joins with the link a
     const v = await streak.startRun(user)
     await streak.answer(user, { runId: v.runId, index: 0, choice: await choiceFor(v, false) })
   }
-  await assert.rejects(streak.startRun(user), (err) => err.code === 'no_runs')
+  await assert.rejects(streak.startRun(user), (err) => err.code === 'no_runs' && /unlocks in about/.test(err.message))
   home = await streak.streakHome(user)
   assert.equal(home.runs.left, 0)
+  assert.ok(home.runs.nextAt > Date.now(), 'tells the player when the next run unlocks')
+  // An hour later the oldest runs have aged out of the window: the player can play again.
+  await run('UPDATE streak_runs SET started_at = started_at - ? WHERE user_id = ?', [61 * 60_000, user.id])
+  home = await streak.streakHome(user)
+  assert.equal(home.runs.left, 8)
+  assert.equal(home.runs.nextAt, null)
+  const again = await streak.startRun(user)
+  assert.equal(again.finished, false)
 })
 
 test('Golden Hour doubles the points of a correct answer', async () => {
