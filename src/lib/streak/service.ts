@@ -8,6 +8,7 @@ import { ensureRefCode, getUserById, type User } from '../users'
 import { authorizedUser } from '../wallet-authorization'
 import { cleanCampus } from './campuses'
 import * as gate from './gate'
+import { generatedQuestion, isGenerated, randomGenerated } from './generated'
 import { STREAK_QUESTIONS, type StreakQuestion } from './questions'
 import { lagosDay, multiplier, points, questionMs } from './rules'
 
@@ -76,10 +77,15 @@ const goldenAt = (cfg: Config, at: number) => cfg.goldenHours.some((g) => at >= 
 
 const questionById = new Map(STREAK_QUESTIONS.map((q) => [q.id, q]))
 function question(id: string): StreakQuestion {
-  const q = questionById.get(id)
+  const q = isGenerated(id) ? generatedQuestion(id) : questionById.get(id)
   if (!q) throw new StreakError('This question is no longer available.', 500)
   return q
 }
+
+/** Questions lined up for one run: far more than anyone answers in a row. */
+export const RUN_QUESTIONS = 300
+/** Every GENERATED_EVERY-th question is one the game builds itself (maths, patterns, capitals…). */
+export const GENERATED_EVERY = 4
 
 function shuffle<T>(items: readonly T[]): T[] {
   const pool = [...items]
@@ -98,11 +104,27 @@ const getRun = async (id: string) => ((await run('SELECT * FROM streak_runs WHER
 const getAnswer = async (runId: string, idx: number) => ((await run('SELECT * FROM streak_answers WHERE run_id = ? AND idx = ?', [runId, idx])).rows[0] as unknown as AnswerRow) ?? null
 const getPlayer = async (eventId: string, root: string) => ((await run('SELECT * FROM streak_players WHERE event_id = ? AND root_address = ?', [eventId, root])).rows[0] as unknown as PlayerRow) ?? null
 
-/** Questions this person has not seen this event come first, so replays stay fresh as long as possible. */
+/**
+ * The questions for one run. Written questions this person has not seen this event come first (then
+ * the ones they have), and every GENERATED_EVERY-th slot is a freshly generated one, so the game
+ * never runs out and memorising answers doesn't pay. Never the same question twice in a run.
+ */
 async function questionOrder(eventId: string, root: string): Promise<string[]> {
   const seen = new Set((await run(`SELECT DISTINCT a.question_id FROM streak_answers a JOIN streak_runs r ON r.id = a.run_id WHERE r.event_id = ? AND r.root_address = ?`, [eventId, root])).rows.map((r) => String(r.question_id)))
   const ids = STREAK_QUESTIONS.map((q) => q.id)
-  return [...shuffle(ids.filter((id) => !seen.has(id))), ...shuffle(ids.filter((id) => seen.has(id)))]
+  const written = [...shuffle(ids.filter((id) => !seen.has(id))), ...shuffle(ids.filter((id) => seen.has(id)))]
+  const order: string[] = []
+  const used = new Set<string>()
+  while (order.length < RUN_QUESTIONS) {
+    let id: string | undefined
+    if ((order.length + 1) % GENERATED_EVERY === 0 || written.length === 0) {
+      for (let tries = 0; tries < 10 && (!id || used.has(id) || seen.has(id)); tries++) id = randomGenerated(randomInt)
+    } else id = written.shift()
+    if (!id || used.has(id)) continue
+    used.add(id)
+    order.push(id)
+  }
+  return order
 }
 
 async function issue(r: RunRow, idx: number, now = Date.now()) {

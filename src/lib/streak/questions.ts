@@ -4,6 +4,8 @@
 // for every player and every question. Keep facts stable (no follower counts, prices, or anything
 // that changes week to week) and keep it mainstream: nothing obscure or hyper-local.
 
+import { EXTRA_BANK } from './questions-extra'
+
 export type StreakQuestion = { id: string; topic: string; prompt: string; options: readonly [string, string] }
 
 type Row = readonly [prompt: string, right: string, wrong: string]
@@ -374,6 +376,12 @@ const BANK: Record<string, Row[]> = {
 
 const slug = (topic: string) => topic.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '')
 
-export const STREAK_QUESTIONS: StreakQuestion[] = Object.entries(BANK).flatMap(([topic, rows]) =>
+const BASE: StreakQuestion[] = Object.entries(BANK).flatMap(([topic, rows]) =>
   rows.map(([prompt, right, wrong], i) => ({ id: `${slug(topic)}-${i + 1}`, topic, prompt, options: [right, wrong] as const })),
 )
+// The second bank keeps its own ids (`-x<n>`), so the original ids never change.
+const EXTRA: StreakQuestion[] = Object.entries(EXTRA_BANK).flatMap(([topic, rows]) =>
+  rows.map(([prompt, right, wrong], i) => ({ id: `${slug(topic)}-x${i + 1}`, topic, prompt, options: [right, wrong] as const })),
+)
+
+export const STREAK_QUESTIONS: StreakQuestion[] = [...BASE, ...EXTRA]
