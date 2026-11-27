@@ -144,3 +144,7 @@ body { background: var(--color-cream); color: var(--color-ink); }
 .streak-spark { position: absolute; animation: streak-spark 0.8s ease-out forwards; }
 .streak-bump { animation: streak-bump 0.35s ease-out; }
 @media (prefers-reduced-motion: reduce) { .streak-burst, .streak-spark, .streak-bump { animation: none; } }
+
+/* Jara Streak: forest surfaces echo the balance card's faint rings (campaign, not a redesign). */
+.streak-rings::before, .streak-rings::after { content: ''; position: absolute; border: 1px solid #ffffff10; border-radius: 50%; right: -110px; top: -100px; width: 330px; height: 330px; pointer-events: none; }
+.streak-rings::after { width: 460px; height: 460px; right: -175px; top: -165px; }

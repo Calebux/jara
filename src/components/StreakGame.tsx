@@ -345,17 +345,17 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
   }
   const tease = event.golden.startsAt && !event.golden.live ? event.golden.startsAt - serverNow : null
   return (
-    <section className="overflow-hidden rounded-[22px] bg-forest text-cream">
+    <section className="streak-rings relative overflow-hidden rounded-[22px] bg-forest text-cream">
       {golden && event.golden.endsAt && (
-        <div className="flex items-center justify-between gap-3 bg-crest px-5 py-2.5 text-sm font-bold text-ink sm:px-6">
-          <span>⚡ Golden Hour: every point counts double</span>
+        <div className="relative z-10 flex items-center justify-between gap-3 bg-mandarin px-5 py-2.5 text-sm font-bold text-white sm:px-6">
+          <span>⚡ Golden Hour — every point counts double</span>
           <span className="tabular-nums">{shortLeft(event.golden.endsAt - serverNow)}</span>
         </div>
       )}
       {!golden && tease !== null && tease > 0 && (
-        <div className="bg-crest/90 px-5 py-2.5 text-sm font-bold text-ink sm:px-6">⚡ Golden Hour starts in {shortLeft(tease)}. Get ready!</div>
+        <div className="relative z-10 bg-mandarin/15 px-5 py-2.5 text-sm font-bold text-crest sm:px-6">⚡ Golden Hour starts in {shortLeft(tease)} — get ready!</div>
       )}
-      <div className="p-5 sm:p-6">
+      <div className="relative z-10 p-5 sm:p-6">
         <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">
           {event.phase === 'open' ? <><span className="streak-live mr-1.5 inline-block h-2 w-2 rounded-full bg-mandarin align-middle" />Live · ends in {shortLeft((event.endAt ?? 0) - serverNow)}</>
             : event.phase === 'soon' ? `Campus bounty · starts ${event.startAt ? when(event.startAt) : 'soon'}`
@@ -369,16 +369,16 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
           <p className="text-sm text-cream/80">Split between the top {event.winners}. The higher you finish, the more you take.</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {event.prizesGd.slice(0, 3).map((amount, i) => (
-              <div key={i} className={`rounded-xl px-2 text-center ${i === 0 ? 'bg-crest py-3 text-ink' : 'bg-forest-deep/60 py-2'}`}>
+              <div key={i} className={`rounded-xl px-2 py-2.5 text-center ${i === 0 ? 'bg-cream/15 ring-1 ring-crest/40' : 'bg-forest-deep/50'}`}>
                 <p className={i === 0 ? 'text-2xl leading-none' : 'text-lg leading-none'}>{MEDALS[i]}</p>
-                <p className="mt-1 text-[10px] font-bold tracking-wide uppercase opacity-70">{['1st', '2nd', '3rd'][i]}</p>
-                <p className={`font-bold tabular-nums ${i === 0 ? 'text-base' : 'text-sm'}`}>G$ {num(amount)}</p>
+                <p className="mt-1 text-[10px] font-bold tracking-wide text-cream/60 uppercase">{['1st', '2nd', '3rd'][i]}</p>
+                <p className={`font-bold tabular-nums ${i === 0 ? 'text-base text-crest' : 'text-sm'}`}>G$ {num(amount)}</p>
               </div>
             ))}
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
-          {event.perCorrectGd > 0 && <span className="rounded-full bg-crest px-3 py-1.5 text-ink">💰 G$ {num(event.perCorrectGd)} per correct answer</span>}
+          {event.perCorrectGd > 0 && <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">💰 G$ {num(event.perCorrectGd)} per correct answer</span>}
           <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">Free to play</span>
           {home.campus && <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">🎓 {home.campus}</span>}
         </div>
@@ -421,7 +421,7 @@ function RunDots({ home }: { home: StreakHome }) {
   return (
     <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs font-semibold text-cream/75">
       <span className="flex gap-1" aria-label={`${r.freeLeft} of ${r.perDay} daily runs left`}>
-        {Array.from({ length: r.perDay }, (_, i) => <span key={i} className={`h-2.5 w-2.5 rounded-full ${i < r.freeLeft ? 'bg-crest' : 'bg-cream/20'}`} />)}
+        {Array.from({ length: r.perDay }, (_, i) => <span key={i} className={`h-2.5 w-2.5 rounded-full ${i < r.freeLeft ? 'bg-mandarin' : 'bg-cream/20'}`} />)}
       </span>
       <span>{r.freeLeft} of {r.perDay} runs left today{r.bonusLeft > 0 ? ` · +${r.bonusLeft} invite run${r.bonusLeft === 1 ? '' : 's'}` : ''}</span>
     </div>
@@ -436,18 +436,27 @@ function PlayCard({ run, left, busy, picked, reveal, golden, float, shake, glow,
   const pct = Math.max(0, Math.min(100, (left / q.limitMs) * 100))
   const urgent = left < 2_500
   const combo = multiplier(run.streak + 1)
+  const streakTone = golden ? 'text-mandarin' : run.streak >= 10 ? 'text-mandarin-deep' : run.streak >= 5 ? 'text-mandarin' : 'text-forest'
+  const streakLabel = run.streak === 0 ? 'start your streak' : run.streak >= 20 ? 'unstoppable' : run.streak >= 10 ? 'on fire' : run.streak >= 5 ? 'you’re on a roll' : `${run.streak} in a row`
   return (
-    <section key={`shake-${shake}`} className={`app-card relative overflow-hidden p-5 sm:p-6 ${reveal ? 'streak-shake' : ''} ${golden ? 'ring-2 ring-crest' : ''}`}>
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold tracking-[0.14em] text-ink/45 uppercase">Score</p>
-          <p key={`glow-${glow}`} className="streak-glow rounded-lg text-3xl leading-none font-bold tabular-nums">{num(run.score)}</p>
-          {run.earnedGd > 0 && <p className="mt-1 text-xs font-bold text-forest">💰 G$ {num(run.earnedGd)} earned</p>}
+    <section key={`shake-${shake}`} className={`app-card relative overflow-hidden p-5 sm:p-6 ${reveal ? 'streak-shake' : ''} ${golden ? 'ring-2 ring-mandarin' : ''}`}>
+      {/* The streak itself is the hero: a big flame and count, not a chip in a corner. */}
+      <div className="relative min-h-[78px]">
+        <div className="absolute top-0 left-0">
+          <p className="text-[10px] font-bold tracking-[0.14em] text-ink/40 uppercase">Score</p>
+          <p key={`glow-${glow}`} className="streak-glow -ml-1 rounded-lg px-1 text-2xl leading-none font-bold tabular-nums">{num(run.score)}</p>
+          {run.earnedGd > 0 && <p className="mt-1 text-[11px] font-bold text-forest">G$ {num(run.earnedGd)} earned</p>}
         </div>
-        <div className="flex items-center gap-2">
-          {golden && <span className="rounded-full bg-crest px-2.5 py-1 text-xs font-bold text-ink">⚡ ×2</span>}
-          {combo > 1 && <span className="rounded-full bg-mandarin px-2.5 py-1 text-xs font-bold text-white">×{combo} combo</span>}
-          <span key={`streak-${run.streak}`} className={`flex items-center gap-1 rounded-full bg-forest px-3 py-1 text-sm font-bold text-cream ${run.streak > 0 ? 'streak-bump' : ''}`}><span className={run.streak > 0 ? 'streak-flame' : ''}>🔥</span> {run.streak}</span>
+        <div className="absolute top-0 right-0 flex items-center gap-1.5">
+          {golden && <span className="rounded-full bg-mandarin px-2.5 py-1 text-xs font-bold text-white">⚡ ×2</span>}
+          {!golden && combo > 1 && <span className="rounded-full bg-mandarin/15 px-2.5 py-1 text-xs font-bold text-mandarin-deep">×{combo} combo</span>}
+        </div>
+        <div className="flex flex-col items-center pt-0.5">
+          <div className="flex items-end gap-1.5">
+            <span className={`text-4xl leading-none ${run.streak > 0 ? 'streak-flame' : 'opacity-40 grayscale'}`}>🔥</span>
+            <span key={`streak-${run.streak}`} className={`streak-bump text-6xl leading-[0.8] font-black tabular-nums ${streakTone}`}>{run.streak}</span>
+          </div>
+          <p className="mt-1.5 text-[11px] font-bold tracking-[0.16em] text-ink/45 uppercase">{streakLabel}</p>
         </div>
       </div>
 
@@ -493,7 +502,7 @@ function StreakBurst({ float }: { float: Float }) {
       {(hot ? SPARKS : SPARKS.slice(0, 3)).map((s, i) => (
         <span key={i} className="streak-spark text-lg" style={{ '--dx': s.dx, '--dy': s.dy, '--rot': s.rot, animationDelay: `${i * 40}ms` } as React.CSSProperties}>🔥</span>
       ))}
-      <span className={`streak-burst absolute left-0 grid min-w-28 justify-items-center rounded-2xl px-4 py-2 text-center shadow-lg ${float.golden ? 'bg-crest text-ink' : hot ? 'bg-mandarin text-white' : 'bg-forest text-cream'}`}>
+      <span className={`streak-burst absolute left-0 grid min-w-28 justify-items-center rounded-2xl px-4 py-2 text-center shadow-lg ${float.golden ? 'bg-mandarin text-white ring-2 ring-crest' : hot ? 'bg-mandarin text-white' : 'bg-forest text-cream'}`}>
         <span className="flex items-center gap-1 text-2xl leading-none font-black"><span className="streak-flame">🔥</span>{float.gd > 0 ? `+${num(float.gd)}` : `+${num(float.points)}`}</span>
         <span className="mt-1 text-[11px] leading-none font-bold whitespace-nowrap opacity-90">{float.gd > 0 ? `G$ · ${float.streak} in a row` : `pts · ${float.streak} in a row`}{float.golden ? ' · ⚡×2' : ''}</span>
       </span>
@@ -513,7 +522,7 @@ function GameOver({ run, best, home, board, busy, onAgain }: { run: StreakRunVie
         <p className="mt-2 text-5xl leading-none font-bold tracking-tight tabular-nums">{num(run.score)}</p>
         <p className="mt-1 text-sm font-semibold text-ink/55">points · 🔥 {run.streak} in a row</p>
         {run.earnedGd > 0 && <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2 text-sm font-bold text-forest">💰 You earned G$ {num(run.earnedGd)} this run. {run.paid ? 'It’s in your wallet.' : 'It’s on its way to your wallet.'}</p>}
-        {best && run.score > 0 ? <p className="mt-3 inline-block rounded-full bg-crest px-3 py-1 text-sm font-bold">🎉 New personal best!</p>
+        {best && run.score > 0 ? <p className="mt-3 inline-block rounded-full bg-mandarin px-3 py-1 text-sm font-bold text-white">🎉 New personal best!</p>
           : home.best && home.best.score > 0 && <p className="mt-3 text-sm font-semibold text-ink/60">Your best: {num(home.best.score)} pts</p>}
         {you?.rank && (
           <p className="mt-3 text-sm font-bold text-forest">
@@ -557,7 +566,7 @@ function ClaimCard({ home, onClaimed, onError }: { home: StreakHome; onClaimed: 
     finally { setBusy(false) }
   }
   return (
-    <section className="streak-rise overflow-hidden rounded-[22px] bg-crest p-5 text-ink sm:p-6">
+    <section className="streak-rings streak-rise relative overflow-hidden rounded-[22px] bg-forest p-5 text-cream sm:p-6"><div className="relative z-10">
       <p className="text-4xl">{MEDALS[prize.rank - 1] ?? '🏆'}</p>
       <h2 className="mt-2 text-2xl font-bold tracking-tight">You finished #{prize.rank}{home.name ? `, ${home.name.split(' ')[0]}` : ''}!</h2>
       {prize.claimed ? (
@@ -565,11 +574,12 @@ function ClaimCard({ home, onClaimed, onError }: { home: StreakHome; onClaimed: 
       ) : (
         <>
           <p className="mt-1 font-semibold">Your share of the prize pool: <b>G$ {num(prize.amountGd)}</b>. Claim it and it goes straight to your wallet.</p>
-          <button onClick={() => void claim()} disabled={busy} className="app-button mt-4 min-h-14 w-full justify-center bg-forest text-base text-cream hover:bg-forest-soft disabled:opacity-60">
+          <button onClick={() => void claim()} disabled={busy} className="app-button mt-4 min-h-14 w-full justify-center bg-mandarin text-base text-white hover:bg-mandarin-deep disabled:opacity-60">
             {busy ? 'Sending to your wallet…' : `Claim G$ ${num(prize.amountGd)}`}
           </button>
         </>
       )}
+      </div>
     </section>
   )
 }
@@ -635,12 +645,12 @@ function JoinForm({ home, busy, onJoin }: { home: StreakHome; busy: boolean; onJ
   )
 }
 
-const MEDAL_BG = ['bg-[#fff1c2]', 'bg-[#eef0f2]', 'bg-[#f8e3d2]']
+const MEDAL_BG = ['bg-[#f4f7ef] ring-1 ring-mandarin/30', 'bg-[#f5f6f3]', 'bg-[#f6f3ee]']
 
 function PlayerRow({ p, board }: { p: StreakBoard['top'][number]; board: StreakBoard }) {
   const prize = p.rank <= board.winners
   return (
-    <li className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${p.you ? 'bg-[#e9f3e4] ring-1 ring-forest/30' : prize ? 'bg-[#fff6e0]' : 'odd:bg-[#f7f8f2]'}`}>
+    <li className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${p.you ? 'bg-[#e9f3e4] ring-1 ring-forest/30' : prize ? 'bg-[#f4f7ef]' : 'odd:bg-[#f7f8f2]'}`}>
       <span className="w-7 shrink-0 text-center text-base font-bold">{MEDALS[p.rank - 1] ?? <span className="text-sm text-ink/45">#{p.rank}</span>}</span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-1.5">

@@ -38,7 +38,7 @@ export class StreakError extends Error {
 /** Allowance for the answer's trip to the server after the on-screen timer ends. */
 export const NETWORK_GRACE_MS = 1_500
 /** Golden Hour is announced in the app this long before it starts. */
-export const GOLDEN_TEASE_MS = 10 * 60_000
+export const GOLDEN_TEASE_MS = 60 * 60_000
 
 export type StreakPhase = 'off' | 'soon' | 'open' | 'closed'
 
