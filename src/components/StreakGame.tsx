@@ -6,7 +6,7 @@ import { ApiError, readApiResponse, responseMessage } from '@/lib/api-response'
 import { CAMPUSES } from '@/lib/streak/campuses'
 import { multiplier } from '@/lib/streak/rules'
 import type { StreakBoard, StreakHome, StreakRunView } from '@/lib/streak/service'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { StreakAudio } from './streak-audio'
 
 // Jara Streak, the campus bounty: how many can you get right in a row? Two answers, one is right,
@@ -26,7 +26,6 @@ async function request<T>(url: string, body?: object): Promise<T> {
 const lagos = (ms: number, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', ...opts }).format(ms)
 const when = (ms: number) => lagos(ms, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 const num = (n: number) => n.toLocaleString('en-US')
-const MEDALS = ['🥇', '🥈', '🥉']
 const MUTE_KEY = 'jara-streak-muted'
 
 function parts(ms: number) {
@@ -260,14 +259,20 @@ export function StreakGame() {
     <Shell sound={sound} muted={muted} onSound={toggleSound}>
       {toast && <div role="status" className="streak-rise fixed top-4 left-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl bg-ink px-4 py-3 text-center text-sm font-bold text-cream shadow-xl">{toast}</div>}
 
-      {reveal ? (
-        <PlayCard run={reveal.run} left={0} busy picked={reveal.choice} reveal={reveal} golden={false} float={null} shake={shake} glow={glow} onChoose={() => undefined} />
-      ) : playing && q ? (
-        <PlayCard run={run!} left={left} busy={busy} picked={picked} reveal={null} golden={Boolean(golden)} float={float} shake={shake} glow={glow} onChoose={(c) => void choose(c)} />
+      {reveal || (playing && q) ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <div className="mx-auto w-full max-w-2xl min-w-0 lg:max-w-none">
+            {reveal
+              ? <PlayCard run={reveal.run} left={0} busy picked={reveal.choice} reveal={reveal} golden={false} float={null} shake={shake} glow={glow} onChoose={() => undefined} />
+              : <PlayCard run={run!} left={left} busy={busy} picked={picked} reveal={null} golden={Boolean(golden)} float={float} shake={shake} glow={glow} onChoose={(c) => void choose(c)} />}
+          </div>
+          <aside className="hidden min-w-0 lg:block">{board && <LiveBoard board={board} />}</aside>
+        </div>
       ) : (
-        <>
+        <div className="grid gap-6">
+          {/* Phones: the result of the run comes first. Desktop shows it in the left column. */}
           {run?.finished && event.phase !== 'off' && (
-            <GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} />
+            <div className="lg:hidden"><GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} /></div>
           )}
 
           <Hero home={home} serverNow={serverNow} golden={Boolean(golden)} busy={busy} canPlay={canPlay} runsLeft={runsLeft} showPlay={!run?.finished}
@@ -275,24 +280,28 @@ export function StreakGame() {
 
           {error && <p role="alert" className="rounded-xl bg-[#fde8e2] p-3 text-sm font-semibold text-[#8a2a12]">{error}</p>}
 
-          {event.phase === 'closed' && home.prize && <ClaimCard home={home} onClaimed={(h) => { setHome(h); audio.current?.best() }} onError={setError} />}
-
-          <Setup home={home} />
-
-          {(event.phase === 'open' || event.phase === 'closed') && board && <TopThree board={board} />}
-
-          {event.phase !== 'closed' && home.connected && !home.playedElsewhere && <InviteCard home={home} />}
-
-          {event.phase !== 'closed' && <Rules home={home} />}
-
-          {event.phase === 'soon' && board && board.players === 0 && (
-            <section className="app-card p-5 text-center sm:p-6">
-              <p className="text-3xl">🏆</p>
-              <p className="mt-2 font-bold">The leaderboard goes live when the bounty starts.</p>
-              <p className="mt-1 text-sm text-ink/55">Invite your friends now. Every friend who joins and verifies before then gives you extra runs.</p>
-            </section>
-          )}
-        </>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+            <div className="grid min-w-0 gap-6">
+              {run?.finished && event.phase !== 'off' && (
+                <div className="hidden lg:block"><GameOver run={run} best={bestThisRun} home={home} board={board} busy={busy} serverNow={serverNow} onAgain={() => void begin()} /></div>
+              )}
+              {event.phase === 'closed' && home.prize && <ClaimCard home={home} onClaimed={(h) => { setHome(h); audio.current?.best() }} onError={setError} />}
+              <Setup home={home} />
+              {event.phase !== 'closed' && <Rules home={home} />}
+            </div>
+            <aside className="grid min-w-0 gap-6">
+              {(event.phase === 'open' || event.phase === 'closed') && board && <LiveBoard board={board} />}
+              {event.phase === 'soon' && (
+                <section className="app-card p-6">
+                  <p className="grid h-10 w-10 place-items-center rounded-xl bg-[#f4f7ef] text-forest"><Icon name="chart" className="h-5 w-5" /></p>
+                  <h2 className="mt-4 text-base font-semibold tracking-tight">The leaderboard opens at the start</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-ink/55">Save your spot and invite friends now. Every friend who joins and verifies gives you extra runs.</p>
+                </section>
+              )}
+              {event.phase !== 'closed' && home.connected && !home.playedElsewhere && <InviteCard home={home} />}
+            </aside>
+          </div>
+        </div>
       )}
     </Shell>
   )
@@ -313,20 +322,33 @@ function Shell({ children, sound = false, muted = false, onSound, title = 'Jara 
           {title === 'Leaderboard' ? <Link href="/app/streak" className="app-button-secondary text-xs">Back to the game</Link> : <Link href="/app" className="app-button-secondary text-xs">Back to Jara</Link>}
         </div>
       </header>
-      <main className="mx-auto grid max-w-xl gap-5 px-4 py-6 sm:py-8">{children}</main>
+      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
     </div>
   )
 }
 
 function Countdown({ ms }: { ms: number }) {
   const p = parts(ms)
-  const box = (value: number, label: string) => (
-    <div className="grid min-w-16 place-items-center rounded-2xl bg-cream/10 px-3 py-2.5 ring-1 ring-cream/15">
-      <span className="text-3xl leading-none font-bold tabular-nums">{String(value).padStart(2, '0')}</span>
-      <span className="mt-1 text-[10px] font-bold tracking-[0.14em] text-cream/60 uppercase">{label}</span>
+  const cell = (value: number, label: string) => (
+    <div className="border-r border-cream/10 px-4 py-3 text-center last:border-r-0 sm:px-5">
+      <p className="text-[30px] leading-none font-semibold tracking-[-0.04em] tabular-nums sm:text-[34px]">{String(value).padStart(2, '0')}</p>
+      <p className="mt-1.5 text-[10px] font-bold tracking-[0.14em] text-cream/45 uppercase">{label}</p>
     </div>
   )
-  return <div className="mt-5 flex gap-2" aria-label={`Starts in ${p.d} days ${p.h} hours ${p.m} minutes`}>{box(p.d, 'days')}{box(p.h, 'hrs')}{box(p.m, 'min')}{box(p.s, 'sec')}</div>
+  return (
+    <div className="mt-6 inline-grid grid-cols-4 overflow-hidden rounded-2xl bg-forest-deep/40 ring-1 ring-cream/10" aria-label={`Starts in ${p.d} days ${p.h} hours ${p.m} minutes`}>
+      {cell(p.d, 'Days')}{cell(p.h, 'Hours')}{cell(p.m, 'Mins')}{cell(p.s, 'Secs')}
+    </div>
+  )
+}
+
+const PLACE = ['1st', '2nd', '3rd']
+const MEDAL_TONE = ['bg-crest text-ink', 'bg-[#d6dbd7] text-ink', 'bg-[#e2a774] text-ink']
+
+/** A small medal coin for a rank: gold, silver, bronze, then a quiet number. */
+function RankBadge({ rank, onDark = false }: { rank: number; onDark?: boolean }) {
+  const tone = MEDAL_TONE[rank - 1] ?? (onDark ? 'bg-cream/10 text-cream/70' : 'bg-ink/5 text-ink/55')
+  return <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold tabular-nums ${tone}`}>{rank}</span>
 }
 
 function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPlay, onJoined, onError }: {
@@ -334,83 +356,99 @@ function Hero({ home, serverNow, golden, busy, canPlay, runsLeft, showPlay, onPl
   onPlay: (details?: { campus?: string; name?: string }) => void; onJoined: (h: StreakHome) => void; onError: (e: string | null) => void
 }) {
   const { event } = home
-  const prize = `G$ ${num(event.prizePoolGd)} prize pool`
   if (event.phase === 'off') {
     return (
-      <section className="app-card p-6">
-        <h1 className="text-2xl font-bold">Jara Streak</h1>
-        <p className="mt-2 text-ink/65">The campus bounty isn’t open yet. Watch Jara’s socials for the date.</p>
+      <section className="app-card p-6 sm:p-8">
+        <h1 className="text-3xl font-semibold tracking-[-0.04em]">Jara Streak</h1>
+        <p className="mt-2 text-ink/60">The campus bounty isn’t open yet. Watch Jara’s socials for the date.</p>
       </section>
     )
   }
   const tease = event.golden.startsAt && !event.golden.live ? event.golden.startsAt - serverNow : null
+  const refill = event.runWindowMinutes === 60 ? 'every hour' : event.runWindowMinutes % 60 === 0 ? `every ${event.runWindowMinutes / 60} hours` : `every ${event.runWindowMinutes} min`
+  const stats: [string, string][] = [
+    ['Per correct answer', event.perCorrectGd > 0 ? `G$ ${num(event.perCorrectGd)}` : 'Points only'],
+    ['Runs', `${event.runsPerWindow} ${refill}`],
+    ['Your best', home.best && home.best.score > 0 ? `${num(home.best.score)} pts · ${home.best.streak} in a row` : 'No runs yet'],
+    [home.earnedGd > 0 ? 'G$ earned' : 'Your school', home.earnedGd > 0 ? `G$ ${num(home.earnedGd)}` : home.campus ?? 'Not set yet'],
+  ]
   return (
     <section className="streak-rings relative overflow-hidden rounded-[22px] bg-forest text-cream">
       {golden && event.golden.endsAt && (
-        <div className="relative z-10 flex items-center justify-between gap-3 bg-mandarin px-5 py-2.5 text-sm font-bold text-white sm:px-6">
-          <span>⚡ Golden Hour — every point counts double</span>
-          <span className="tabular-nums">{shortLeft(event.golden.endsAt - serverNow)}</span>
+        <div className="relative z-10 flex items-center justify-between gap-3 bg-mandarin px-6 py-2.5 text-sm font-semibold text-white sm:px-8">
+          <span className="flex items-center gap-2"><Icon name="bolt" className="h-4 w-4" /> Golden Hour: every point counts double</span>
+          <span className="tabular-nums">{shortLeft(event.golden.endsAt - serverNow)} left</span>
         </div>
       )}
       {!golden && tease !== null && tease > 0 && (
-        <div className="relative z-10 bg-mandarin/15 px-5 py-2.5 text-sm font-bold text-crest sm:px-6">⚡ Golden Hour starts in {shortLeft(tease)} — get ready!</div>
+        <div className="relative z-10 flex items-center gap-2 border-b border-cream/10 px-6 py-2.5 text-sm font-semibold text-crest sm:px-8">
+          <Icon name="bolt" className="h-4 w-4" /> Golden Hour starts in {shortLeft(tease)}. Double points.
+        </div>
       )}
-      <div className="relative z-10 p-5 sm:p-6">
-        <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">
-          {event.phase === 'open' ? <><span className="streak-live mr-1.5 inline-block h-2 w-2 rounded-full bg-mandarin align-middle" />Live · ends in {shortLeft((event.endAt ?? 0) - serverNow)}</>
-            : event.phase === 'soon' ? `Campus bounty · starts ${event.startAt ? when(event.startAt) : 'soon'}`
-            : 'Campus bounty · ended'}
-        </p>
-        <h1 className="mt-1 text-[34px] leading-tight font-bold tracking-[-0.04em]">Jara Streak <span className="streak-flame">🔥</span></h1>
-        <p className="mt-1 text-cream/80">How many can you get right in a row?</p>
-        <div className="mt-4 rounded-2xl bg-cream/10 p-4 ring-1 ring-cream/15" aria-label={`${prize}, shared equally by the top ${event.winners}`}>
-          <p className="text-[11px] font-bold tracking-[0.14em] text-crest uppercase">🏆 Prize pool</p>
-          <p className="text-[32px] leading-tight font-bold tracking-tight tabular-nums">G$ {num(event.prizePoolGd)}</p>
-          <p className="text-sm text-cream/80">Split between the top {event.winners}. The higher you finish, the more you take.</p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+
+      <div className="relative z-10 grid gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-12">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-[11px] font-bold tracking-[0.14em] text-crest uppercase">
+            {event.phase === 'open' && <span className="streak-live h-2 w-2 rounded-full bg-mandarin" />}
+            {event.phase === 'open' ? `Live · ends in ${shortLeft((event.endAt ?? 0) - serverNow)}`
+              : event.phase === 'soon' ? `Campus bounty · starts ${event.startAt ? when(event.startAt) : 'soon'}`
+              : 'Campus bounty · ended'}
+          </p>
+          <h1 className="mt-3 flex items-center gap-3 text-[40px] leading-none font-semibold tracking-[-0.05em] sm:text-[54px]">
+            Jara Streak
+            <span aria-hidden className="grid h-11 w-11 place-items-center rounded-2xl bg-mandarin sm:h-12 sm:w-12"><Icon name="flame" className="h-6 w-6 text-white" /></span>
+          </h1>
+          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-cream/65">
+            Two answers, one is right. Answer fast, build your streak and climb the campus leaderboard.{event.perCorrectGd > 0 ? ` Every correct answer earns G$ ${num(event.perCorrectGd)}.` : ''}
+          </p>
+
+          {event.phase === 'soon' && event.startAt && <Countdown ms={event.startAt - serverNow} />}
+
+          {event.phase !== 'closed' && home.connected && !home.playedElsewhere && home.supported && !home.campus && (
+            <div className="max-w-md">
+              <JoinForm home={home} busy={busy} onJoin={async (details) => {
+                if (event.phase === 'open') { onPlay(details); return }
+                onError(null)
+                try { onJoined(await request<StreakHome>('/api/streak/campus', details)) } catch (e) { onError(responseMessage(e)) }
+              }} />
+            </div>
+          )}
+
+          {event.phase === 'open' && canPlay && showPlay && home.campus && (
+            <div className="mt-7 max-w-md">
+              <button onClick={() => onPlay()} disabled={busy || runsLeft <= 0} className="app-button min-h-14 w-full justify-center bg-mandarin px-8 text-base text-white hover:bg-mandarin-deep disabled:opacity-60 sm:w-auto">
+                {busy ? 'Starting…' : runsLeft > 0 ? (home.best?.runs ? 'Play again' : 'Start playing') : (home.runs?.nextAt ? `Next run in ${Math.max(1, Math.ceil((home.runs.nextAt - serverNow) / 60_000))} min` : 'Out of runs for now')}
+                {!busy && runsLeft > 0 && <Icon name="arrow" className="h-4 w-4" />}
+              </button>
+              <RunDots home={home} serverNow={serverNow} />
+            </div>
+          )}
+          {event.phase === 'closed' && <p className="mt-6 max-w-md text-sm text-cream/70">Thanks for playing. The final standings are on the right. Winners claim their prize here.</p>}
+        </div>
+
+        <div className="rounded-2xl bg-forest-deep/40 p-5 ring-1 ring-cream/10 sm:p-6 lg:self-start">
+          <p className="text-xs font-semibold text-cream/55">Prize pool</p>
+          <p className="mt-2 text-[42px] leading-none font-semibold tracking-[-0.05em] tabular-nums"><span className="mr-1.5 text-[22px] font-medium tracking-normal text-crest">G$</span>{num(event.prizePoolGd)}</p>
+          <p className="mt-2 text-xs leading-relaxed text-cream/50">Shared by the top {event.winners}. The higher you finish, the bigger your share.</p>
+          <ul className="mt-5 divide-y divide-cream/10 border-t border-cream/10">
             {event.prizesGd.slice(0, 3).map((amount, i) => (
-              <div key={i} className={`rounded-xl px-2 py-2.5 text-center ${i === 0 ? 'bg-cream/15 ring-1 ring-crest/40' : 'bg-forest-deep/50'}`}>
-                <p className={i === 0 ? 'text-2xl leading-none' : 'text-lg leading-none'}>{MEDALS[i]}</p>
-                <p className="mt-1 text-[10px] font-bold tracking-wide text-cream/60 uppercase">{['1st', '2nd', '3rd'][i]}</p>
-                <p className={`font-bold tabular-nums ${i === 0 ? 'text-base text-crest' : 'text-sm'}`}>G$ {num(amount)}</p>
-              </div>
+              <li key={i} className="flex items-center justify-between gap-3 py-3">
+                <span className="flex items-center gap-3 text-sm font-semibold"><RankBadge rank={i + 1} onDark />{PLACE[i]} place</span>
+                <span className="text-sm font-semibold tabular-nums">G$ {num(amount)}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
-          {event.perCorrectGd > 0 && <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">💰 G$ {num(event.perCorrectGd)} per correct answer</span>}
-          <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">Free to play</span>
-          {home.campus && <span className="rounded-full bg-cream/10 px-3 py-1.5 ring-1 ring-cream/20">🎓 {home.campus}</span>}
-        </div>
-
-        {event.phase === 'soon' && event.startAt && <Countdown ms={event.startAt - serverNow} />}
-
-        {event.phase === 'open' && home.best && home.best.score > 0 && (
-          <p className="mt-4 text-sm font-semibold text-cream/80">Your best: <b className="text-cream">{num(home.best.score)} pts</b> · 🔥 {home.best.streak} in a row</p>
-        )}
-
-        {event.phase !== 'closed' && home.connected && !home.playedElsewhere && home.supported && !home.campus && (
-          <JoinForm home={home} busy={busy} onJoin={async (details) => {
-            if (event.phase === 'open') { onPlay(details); return }
-            onError(null)
-            try { onJoined(await request<StreakHome>('/api/streak/campus', details)) } catch (e) { onError(responseMessage(e)) }
-          }} />
-        )}
-
-        {event.phase === 'open' && home.best && home.earnedGd > 0 && (
-          <p className="mt-1 text-sm font-semibold text-cream/80">G$ earned so far: <b className="text-cream">G$ {num(home.earnedGd)}</b></p>
-        )}
-
-        {event.phase === 'open' && canPlay && showPlay && home.campus && (
-          <div className="mt-5">
-            <button onClick={() => onPlay()} disabled={busy || runsLeft <= 0} className="app-button min-h-14 w-full justify-center bg-mandarin text-base text-white hover:bg-mandarin-deep disabled:opacity-60">
-              {busy ? 'Starting…' : runsLeft > 0 ? (home.best?.runs ? 'Play again' : 'Start playing') : (home.runs?.nextAt ? `Next run in ${Math.max(1, Math.ceil((home.runs.nextAt - serverNow) / 60_000))} min` : 'Out of runs for now')}
-            </button>
-            <RunDots home={home} serverNow={serverNow} />
-          </div>
-        )}
-        {event.phase === 'closed' && <p className="mt-4 text-sm font-semibold text-cream/80">Thanks for playing! The final leaderboard is below. Winners get their prize in their wallet automatically.</p>}
       </div>
+
+      <dl className="relative z-10 grid grid-cols-2 gap-px border-t border-cream/10 bg-cream/10 lg:grid-cols-4">
+        {stats.map(([label, value]) => (
+          <div key={label} className="min-w-0 bg-forest px-6 py-4 sm:px-8">
+            <dt className="text-[11px] font-semibold text-cream/50">{label}</dt>
+            <dd className="mt-1 truncate text-[15px] font-semibold tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   )
 }
@@ -515,7 +553,7 @@ function StreakBurst({ float }: { float: Float }) {
 function GameOver({ run, best, home, board, busy, serverNow, onAgain }: { run: StreakRunView; best: boolean; home: StreakHome; board: StreakBoard | null; busy: boolean; serverNow: number; onAgain: () => void }) {
   const you = board?.you
   const runsLeft = home.runs?.left ?? 0
-  const title = run.ended === 'timeout' ? '⏰ Time’s up!' : run.ended === 'wrong' ? 'Run over!' : run.ended === 'cleared' ? '🤯 You answered every question!' : run.ended === 'closed' ? 'The bounty has ended' : 'Run over'
+  const title = run.ended === 'timeout' ? 'Time’s up' : run.ended === 'wrong' ? 'Run over!' : run.ended === 'cleared' ? 'You answered every question!' : run.ended === 'closed' ? 'The bounty has ended' : 'Run over'
   const share = `🔥 I just hit a ${run.streak} streak (${num(run.score)} pts) on Jara Streak! The top ${home.event.winners} share a G$ ${num(home.event.prizePoolGd)} prize pool. Beat me 👉 ${home.inviteLink ?? ''}`
   return (
     <section className="app-card streak-rise overflow-hidden">
@@ -523,12 +561,12 @@ function GameOver({ run, best, home, board, busy, serverNow, onAgain }: { run: S
         <p className="text-sm font-bold text-ink/60">{title}</p>
         <p className="mt-2 text-5xl leading-none font-bold tracking-tight tabular-nums">{num(run.score)}</p>
         <p className="mt-1 text-sm font-semibold text-ink/55">points · 🔥 {run.streak} in a row</p>
-        {run.earnedGd > 0 && <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2 text-sm font-bold text-forest">💰 You earned G$ {num(run.earnedGd)} this run. {run.paid ? 'It’s in your wallet.' : 'It’s on its way to your wallet.'}</p>}
-        {best && run.score > 0 ? <p className="mt-3 inline-block rounded-full bg-mandarin px-3 py-1 text-sm font-bold text-white">🎉 New personal best!</p>
+        {run.earnedGd > 0 && <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2 text-sm font-bold text-forest">You earned G$ {num(run.earnedGd)} this run. {run.paid ? 'It’s in your wallet.' : 'It’s on its way to your wallet.'}</p>}
+        {best && run.score > 0 ? <p className="mt-3 inline-block rounded-full bg-mandarin px-3 py-1 text-sm font-bold text-white">New personal best</p>
           : home.best && home.best.score > 0 && <p className="mt-3 text-sm font-semibold text-ink/60">Your best: {num(home.best.score)} pts</p>}
         {you?.rank && (
           <p className="mt-3 text-sm font-bold text-forest">
-            {you.rank <= home.event.winners ? `${MEDALS[you.rank - 1] ?? '🏆'} You’re #${you.rank}: in the prize zone! Hold on to it.` : `You’re #${you.rank}${you.toPodium ? `, ${num(you.toPodium)} points from the top ${home.event.winners}` : ''}.`}
+            {you.rank <= home.event.winners ? `You’re #${you.rank}, in the prize zone. Hold on to it.` : `You’re #${you.rank}${you.toPodium ? `, ${num(you.toPodium)} points from the top ${home.event.winners}` : ''}.`}
           </p>
         )}
       </div>
@@ -569,7 +607,7 @@ function ClaimCard({ home, onClaimed, onError }: { home: StreakHome; onClaimed: 
   }
   return (
     <section className="streak-rings streak-rise relative overflow-hidden rounded-[22px] bg-forest p-5 text-cream sm:p-6"><div className="relative z-10">
-      <p className="text-4xl">{MEDALS[prize.rank - 1] ?? '🏆'}</p>
+      <span className={`grid h-12 w-12 place-items-center rounded-full text-lg font-bold tabular-nums ${MEDAL_TONE[prize.rank - 1] ?? 'bg-cream/10 text-cream'}`}>{prize.rank}</span>
       <h2 className="mt-2 text-2xl font-bold tracking-tight">You finished #{prize.rank}{home.name ? `, ${home.name.split(' ')[0]}` : ''}!</h2>
       {prize.claimed ? (
         <p className="mt-1 font-semibold">✓ Claimed. <b>G$ {num(prize.amountGd)}</b> is in your wallet. Buy airtime or data in Jara, or cash out to your bank.</p>
@@ -592,7 +630,7 @@ function Setup({ home }: { home: StreakHome }) {
   if (!home.signedIn || !home.connected) {
     return (
       <section className="app-card p-5 sm:p-6">
-        <h2 className="text-lg font-bold">{home.signedIn ? 'Verify your GoodDollar wallet to play' : 'Join Jara to play'}</h2>
+        <h2 className="text-lg font-semibold tracking-tight">{home.signedIn ? 'Verify your GoodDollar wallet to play' : 'Join Jara to play'}</h2>
         <p className="mt-1 text-sm text-ink/60">One player per real person: you play with your verified GoodDollar wallet, and that’s where your G$ and any prize land.</p>
         <Link href="/app" className="app-button mt-4 w-full justify-center bg-forest text-cream hover:bg-forest-soft min-h-12 text-sm">{home.signedIn ? 'Finish setting up →' : 'Get started on Jara →'}</Link>
       </section>
@@ -604,13 +642,56 @@ function Setup({ home }: { home: StreakHome }) {
   if (!home.supported) {
     return (
       <section className="app-card p-5 sm:p-6">
-        <h2 className="text-lg font-bold">One step: vote for Jara on Flowstate</h2>
+        <h2 className="text-lg font-semibold tracking-tight">One step: vote for Jara on Flowstate</h2>
         <p className="mt-1 text-sm text-ink/60">Give Jara at least one of your GoodBuilders votes. It’s free: Jara covers the network fee. Then come back and play.</p>
         <Link href="/app#vote" className="app-button mt-4 w-full justify-center bg-forest text-cream hover:bg-forest-soft min-h-12 text-sm">Vote for Jara →</Link>
       </section>
     )
   }
   return null
+}
+
+/**
+ * Pick a school inside the card: search, tap one from the list below, or, if it isn't listed, use
+ * exactly what you typed. Everything stays in this section (no browser pop-up).
+ */
+function SchoolPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const matches = q ? CAMPUSES.filter((c) => c.toLowerCase().includes(q)) : CAMPUSES
+  const exact = CAMPUSES.some((c) => c.toLowerCase() === q)
+  const row = 'flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left text-sm font-semibold transition'
+  if (value) {
+    return (
+      <div className="grid gap-1 text-xs font-bold text-cream/75">Your school
+        <div className="flex min-h-12 items-center justify-between gap-3 rounded-xl bg-white px-3 text-ink">
+          <span className="flex min-w-0 items-center gap-2 font-semibold"><Icon name="check" className="h-4 w-4 shrink-0 text-forest" strokeWidth={3} /><span className="truncate">{value}</span></span>
+          <button type="button" onClick={() => { onChange(''); setQuery('') }} className="shrink-0 text-xs font-bold text-forest underline">Change</button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="grid gap-1 text-xs font-bold text-cream/75">
+      <label htmlFor="streak-school">Your school (you can only pick once)</label>
+      <div className="overflow-hidden rounded-xl bg-white text-ink">
+        <input id="streak-school" value={query} onChange={(e) => setQuery(e.target.value)} maxLength={40} autoComplete="off" placeholder="Search your school…"
+          className="min-h-12 w-full border-b border-ink/10 bg-transparent px-3 font-semibold outline-none placeholder:text-ink/40" />
+        <ul className="max-h-52 overflow-y-auto overscroll-contain py-1" role="listbox" aria-label="Schools">
+          {matches.map((c) => (
+            <li key={c}><button type="button" role="option" aria-selected={false} onClick={() => onChange(c)} className={`${row} hover:bg-[#f3f7ef]`}>{c}<Icon name="arrow" className="h-3.5 w-3.5 text-ink/25" /></button></li>
+          ))}
+          {q.length >= 2 && !exact && (
+            <li className="border-t border-ink/10"><button type="button" onClick={() => onChange(query.replace(/\s+/g, ' ').trim())} className={`${row} text-forest hover:bg-[#f3f7ef]`}>
+              <span className="min-w-0 truncate">Not listed? Use “{query.trim()}”</span><Icon name="plus" className="h-4 w-4 shrink-0" />
+            </button></li>
+          )}
+          {matches.length === 0 && q.length < 2 && <li className="px-3 py-3 text-sm font-medium text-ink/50">Type at least 2 letters.</li>}
+        </ul>
+      </div>
+      <p className="font-medium text-cream/55">Can’t find it? Type your school’s name and tap “Use”.</p>
+    </div>
+  )
 }
 
 /** First time only: the school (for the campus leaderboard) and, if the account has none, a name. */
@@ -634,10 +715,7 @@ function JoinForm({ home, busy, onJoin }: { home: StreakHome; busy: boolean; onJ
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} autoComplete="given-name" placeholder="e.g. Tolu A." className={field} />
         </label>
       )}
-      <label className="grid gap-1 text-xs font-bold text-cream/75">Your school (type it, or pick from the list — set once)
-        <input list="streak-campuses" value={campus} onChange={(e) => setCampus(e.target.value)} maxLength={40} autoComplete="off" placeholder="e.g. UNILAG, or your school's name" className={field} />
-        <datalist id="streak-campuses">{CAMPUSES.map((c) => <option key={c} value={c} />)}</datalist>
-      </label>
+      <SchoolPicker value={campus} onChange={setCampus} />
       <button type="submit" disabled={!ready || saving || busy} className="app-button mt-1 min-h-14 w-full justify-center bg-mandarin text-base text-white hover:bg-mandarin-deep disabled:opacity-60">
         {saving || busy ? 'One moment…' : home.event.phase === 'open' ? 'Let’s play 🔥' : 'Save my spot'}
       </button>
@@ -645,55 +723,53 @@ function JoinForm({ home, busy, onJoin }: { home: StreakHome; busy: boolean; onJ
   )
 }
 
-const MEDAL_BG = ['bg-[#f4f7ef] ring-1 ring-mandarin/30', 'bg-[#f5f6f3]', 'bg-[#f6f3ee]']
-
 function PlayerRow({ p, board }: { p: StreakBoard['top'][number]; board: StreakBoard }) {
   const prize = p.rank <= board.winners
   return (
-    <li className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${p.you ? 'bg-[#e9f3e4] ring-1 ring-forest/30' : prize ? 'bg-[#f4f7ef]' : 'odd:bg-[#f7f8f2]'}`}>
-      <span className="w-7 shrink-0 text-center text-base font-bold">{MEDALS[p.rank - 1] ?? <span className="text-sm text-ink/45">#{p.rank}</span>}</span>
+    <li className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${p.you ? 'bg-[#eef4e8]' : ''}`}>
+      <RankBadge rank={p.rank} />
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm font-bold">{p.name}{p.you ? ' (you)' : ''}</span>
-          <span className="shrink-0 rounded-full bg-mandarin/10 px-1.5 py-0.5 text-[11px] font-bold text-mandarin-deep" title={`Best streak: ${p.streak} in a row`}>🔥 {p.streak}</span>
-          {p.live && <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#e9f3e4] px-1.5 py-0.5 text-[10px] font-bold text-forest"><span className="streak-live h-1.5 w-1.5 rounded-full bg-[#2f9e5a]" />playing</span>}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold">{p.name}{p.you ? ' (you)' : ''}</span>
+          {p.live && <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold tracking-wide text-forest uppercase"><span className="streak-live h-1.5 w-1.5 rounded-full bg-[#2f9e5a]" />Playing</span>}
         </span>
-        <span className="block truncate text-[11px] font-semibold text-ink/45">{p.campus ?? p.wallet}</span>
+        <span className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] font-medium text-ink/45">
+          <span className="truncate">{p.campus ?? p.wallet}</span>
+          <span className="shrink-0 font-semibold text-mandarin-deep" title={`Best streak: ${p.streak} in a row`}>🔥 {p.streak}</span>
+        </span>
       </span>
       <span className="shrink-0 text-right">
-        <span className="block text-sm font-bold tabular-nums">{num(p.score)}</span>
-        {prize && <span className="block text-[11px] font-bold text-mandarin">wins G$ {num(board.prizesGd[p.rank - 1] ?? 0)}</span>}
+        <span className="block text-sm font-semibold tabular-nums">{num(p.score)}</span>
+        {prize && <span className="block text-[11px] font-semibold text-ink/45 tabular-nums">wins G$ {num(board.prizesGd[p.rank - 1] ?? 0)}</span>}
       </span>
     </li>
   )
 }
 
-/** On the game screen: the current top 3, and the way to the full leaderboard. */
-function TopThree({ board }: { board: StreakBoard }) {
-  const top = board.top.slice(0, board.winners)
+/** The live leaderboard panel beside the game. */
+function LiveBoard({ board }: { board: StreakBoard }) {
+  const top = board.top.slice(0, 8)
+  const closed = board.phase === 'closed'
   return (
-    <section className="app-card p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-bold">{board.phase === 'closed' ? 'Winners' : `Top ${board.winners} right now`}</h2>
-        {board.phase === 'open' && board.playingNow > 0 && <span className="flex items-center gap-1.5 text-xs font-bold text-forest"><span className="streak-live h-2 w-2 rounded-full bg-[#2f9e5a]" />{board.playingNow} playing now</span>}
+    <section className="app-card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-ink/5 px-5 py-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-tight">{closed ? 'Final standings' : 'Live leaderboard'}</h2>
+          <p className="mt-0.5 text-xs text-ink/50">{num(board.players)} player{board.players === 1 ? '' : 's'} · best run counts</p>
+        </div>
+        {!closed && board.playingNow > 0 && (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#eef4e8] px-2.5 py-1 text-[11px] font-bold text-forest"><span className="streak-live h-1.5 w-1.5 rounded-full bg-[#2f9e5a]" />{board.playingNow} playing</span>
+        )}
       </div>
-      {top.length === 0 ? <p className="mt-4 rounded-xl bg-[#f7f8f2] p-4 text-center text-sm font-semibold text-ink/55">No scores yet. The first run takes #1 🥇</p> : (
-        <ol className="mt-4 grid gap-2 sm:grid-cols-3">
-          {top.map((p) => (
-            <li key={p.rank} className={`rounded-2xl p-3 text-center ${MEDAL_BG[p.rank - 1] ?? 'bg-[#f7f8f2]'} ${p.you ? 'ring-2 ring-forest' : ''}`}>
-              <p className="text-2xl">{MEDALS[p.rank - 1]}</p>
-              <p className="mt-1 truncate text-sm font-bold">{p.name}{p.you ? ' (you)' : ''}</p>
-              <p className="truncate text-[11px] font-semibold text-ink/50">{p.campus ?? p.wallet}</p>
-              <p className="mt-1 text-lg font-bold tabular-nums">{num(p.score)}</p>
-              <p className="text-[11px] font-bold text-mandarin-deep">🔥 {p.streak}{p.live ? ' · playing' : ''}</p>
-            </li>
-          ))}
-        </ol>
+      {top.length === 0
+        ? <p className="px-5 py-8 text-center text-sm text-ink/50">No scores yet. The first run takes #1.</p>
+        : <ol className="grid gap-0.5 p-2">{top.map((p) => <PlayerRow key={p.rank} p={p} board={board} />)}</ol>}
+      {board.you?.rank && !top.some((p) => p.you) && (
+        <p className="mx-2 mb-2 rounded-xl bg-[#eef4e8] px-3 py-2.5 text-sm font-semibold">You’re #{board.you.rank} · {num(board.you.score)} pts{board.you.toPodium ? ` · ${num(board.you.toPodium)} to the top ${board.winners}` : ''}</p>
       )}
-      {board.you?.rank && board.you.rank > board.winners && (
-        <p className="mt-3 rounded-xl bg-[#e9f3e4] px-3 py-2.5 text-sm font-bold">You’re #{board.you.rank} · {num(board.you.score)} pts{board.you.toPodium ? ` · ${num(board.you.toPodium)} to the top ${board.winners}` : ''}</p>
-      )}
-      <Link href="/app/streak/leaderboard" className="app-button-secondary mt-3 w-full justify-center text-sm">See the full leaderboard →</Link>
+      <Link href="/app/streak/leaderboard" className="flex items-center justify-center gap-1.5 border-t border-ink/5 px-5 py-3.5 text-sm font-semibold text-forest hover:bg-[#f7f8f2]">
+        Full leaderboard and campuses <Icon name="arrow" className="h-4 w-4" />
+      </Link>
     </section>
   )
 }
@@ -724,7 +800,7 @@ export function StreakLeaderboardPage() {
       {!board ? <div className="app-card p-6"><p role="status" className="text-sm font-semibold text-ink/55">Loading the leaderboard…</p></div> : (
         <section className="app-card p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold">{tab === 'players' ? 'Players' : 'Campuses'}</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{tab === 'players' ? 'Players' : 'Campuses'}</h2>
             <div className="flex gap-1 rounded-full bg-[#f4f5ef] p-1">
               <button className={tabClass('players')} onClick={() => setTab('players')}>Players</button>
               <button className={tabClass('campuses')} onClick={() => setTab('campuses')}>Campuses</button>
@@ -739,7 +815,7 @@ export function StreakLeaderboardPage() {
               <ol className="mt-4 grid gap-1.5">
                 {board.campuses.map((c) => (
                   <li key={c.campus} className="flex items-center gap-3 rounded-xl px-3 py-2.5 odd:bg-[#f7f8f2]">
-                    <span className="w-7 shrink-0 text-center font-bold">{MEDALS[c.rank - 1] ?? <span className="text-sm text-ink/45">#{c.rank}</span>}</span>
+                    <RankBadge rank={c.rank} />
                     <span className="min-w-0 flex-1 truncate text-sm font-bold">{c.campus} <span className="font-semibold text-ink/45">· {c.players} player{c.players === 1 ? '' : 's'}</span></span>
                     <span className="shrink-0 text-sm font-bold tabular-nums">{num(c.score)}</span>
                   </li>
@@ -752,7 +828,7 @@ export function StreakLeaderboardPage() {
           )}
           <p className="mt-3 text-xs font-semibold text-ink/50">
             {board.phase === 'closed'
-              ? board.prizes.length ? (`🏆 Winners confirmed: ${board.prizes.map((p) => `${MEDALS[p.rank - 1] ?? `#${p.rank}`} G$ ${num(p.amountGd)}`).join(' · ')}. ${board.prizes.every((p) => p.claimed) ? 'All prizes claimed.' : 'Winners: open Jara Streak to claim your prize.'}`) : 'Final scores. Prizes go out shortly.'
+              ? board.prizes.length ? (`🏆 Winners confirmed: ${board.prizes.map((p) => `${PLACE[p.rank - 1] ?? `#${p.rank}`} G$ ${num(p.amountGd)}`).join(' · ')}. ${board.prizes.every((p) => p.claimed) ? 'All prizes claimed.' : 'Winners: open Jara Streak to claim your prize.'}`) : 'Final scores. Prizes go out shortly.'
               : `Each player’s best run counts. 🔥 is their longest streak. Campuses add up their players’ best runs.`}
           </p>
         </section>
@@ -769,7 +845,7 @@ function InviteCard({ home }: { home: StreakHome }) {
   const maxed = r ? r.bonus >= r.maxFriendRuns : false
   return (
     <section className="app-card p-5 sm:p-6">
-      <h2 className="text-lg font-bold">Want more runs? Bring your friends</h2>
+      <h2 className="text-lg font-semibold tracking-tight">Want more runs? Bring your friends</h2>
       <p className="mt-1 text-sm text-ink/60">
         Every friend who joins Jara with your link and verifies gives you <b className="text-ink">+{home.event.runsPerFriend} extra runs</b> on top of your refilling runs{r ? ` (up to +${r.maxFriendRuns})` : ''}.
       </p>
@@ -784,24 +860,30 @@ function InviteCard({ home }: { home: StreakHome }) {
 
 function Rules({ home }: { home: StreakHome }) {
   const { event } = home
-  const rows: [string, React.ReactNode][] = [
-    ['👆', <>Two answers, one is right. Tap fast: you get <b>7 seconds</b>, and it gets shorter as your streak grows.</>],
-    ['💥', <>One wrong answer, or running out of time, ends your run.</>],
-    ...(event.perCorrectGd > 0 ? [['💰', <>Earn <b>G$ {num(event.perCorrectGd)} for every correct answer</b> (up to G$ {num(event.dailyCapGd)} a day), sent to your wallet after each run.</>] as [string, React.ReactNode]] : []),
-    ['🔥', <>Combos: <b>5 in a row ×2</b>, 10 in a row ×3, 20 in a row ×4. Faster answers score more.</>],
-    ['🎯', <>Plenty of runs: <b>{event.runsPerWindow} at a time</b> that refill as time passes, so you’re never locked out for long. Only your best run counts.</>],
-    ['⚡', <><b>Golden Hours</b>: surprise windows when every point counts double. Follow Jara’s socials so you don’t miss them.</>],
-    ['🏆', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the <b>top {event.winners}</b> share the <b>G$ {num(event.prizePoolGd)} prize pool</b>: {event.prizesGd.map((g, i) => <span key={i}>{i ? ', ' : ''}<b>{['1st', '2nd', '3rd'][i] ?? `#${i + 1}`} G$ {num(g)}</b></span>)}. Winners tap <b>Claim</b> and it goes to their wallet. Buy airtime or data in Jara, or cash out to your bank.</>],
+  const rows: [IconName, string, React.ReactNode][] = [
+    ['bolt', 'Answer fast', <>Two answers, one is right. You get 7 seconds, a little less as your streak grows.</>],
+    ['x', 'One miss ends the run', <>A wrong answer, or running out of time, ends it. Then go again.</>],
+    ['flame', 'Build combos', <>5 in a row ×2, 10 in a row ×3, 20 in a row ×4. Faster answers score more.</>],
+    ...(event.perCorrectGd > 0 ? [['coins', 'Earn G$ as you play', <>G$ {num(event.perCorrectGd)} for every correct answer, up to G$ {num(event.dailyCapGd)} a day, sent to your wallet after each run.</>] as [IconName, string, React.ReactNode]] : []),
+    ['undo', 'Runs refill', <>{event.runsPerWindow} runs at a time that come back as time passes. Only your best run counts.</>],
+    ['sparkle', 'Golden Hours', <>Announced windows when every point counts double. Follow Jara’s socials.</>],
+    ['star', 'Win the prize pool', <>When it ends{event.endAt ? ` (${when(event.endAt - 60_000)})` : ''}, the top {event.winners} share G$ {num(event.prizePoolGd)}: {event.prizesGd.map((g, i) => <span key={i}>{i ? ', ' : ''}{PLACE[i] ?? `#${i + 1}`} G$ {num(g)}</span>)}. Winners tap Claim.</>],
   ]
   return (
-    <section className="app-card p-5 sm:p-6">
-      <h2 className="text-lg font-bold">How it works</h2>
-      <ul className="mt-3 grid gap-3">
-        {rows.map(([icon, text], i) => (
-          <li key={i} className="flex gap-3 text-[15px] leading-relaxed text-ink/75"><span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#f4f5ef]">{icon}</span><span>{text}</span></li>
+    <section className="app-card p-6 sm:p-7">
+      <h2 className="text-lg font-semibold tracking-tight">How it works</h2>
+      <ul className="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2">
+        {rows.map(([icon, title, text]) => (
+          <li key={title} className="flex gap-3.5">
+            <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#f4f7ef] text-forest"><Icon name={icon} className="h-[18px] w-[18px]" strokeWidth={2} /></span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">{title}</span>
+              <span className="mt-0.5 block text-sm leading-relaxed text-ink/60">{text}</span>
+            </span>
+          </li>
         ))}
       </ul>
-      <p className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-ink/50"><Icon name="check" className="h-3.5 w-3.5" strokeWidth={3} /> One player per verified person. Fair play: the clock runs on Jara’s server.</p>
+      <p className="mt-6 flex items-center gap-1.5 border-t border-ink/5 pt-4 text-xs font-medium text-ink/50"><Icon name="check" className="h-3.5 w-3.5" strokeWidth={3} /> One player per verified person. The clock and the answers live on Jara’s server, so it’s fair for everyone.</p>
     </section>
   )
 }
