@@ -1,6 +1,8 @@
 import { randomInt, randomUUID } from 'node:crypto'
 import { parseEther, type Address } from 'viem'
 import { gdBalance, sendGdFromStreakWallet, streakWalletAddress } from '../chain'
+import { addCredit } from '../credit'
+import { hasSubmittedTransaction } from '../chain-outbox'
 import { atomic, run } from '../db'
 import { serverConfig } from '../env'
 import { withUserLock } from '../jars'
@@ -48,6 +50,7 @@ export function streakConfig() {
   const problem = !s.startAt || !s.endAt ? 'STREAK_START_AT and STREAK_END_AT are not set'
     : s.endAt <= s.startAt ? 'STREAK_END_AT must be after STREAK_START_AT'
     : !whole(s.prizePoolGd) ? 'STREAK_PRIZE_POOL_GD must be a whole number of G$'
+    : !whole(s.prizeCreditPercent) || s.prizeCreditPercent > 100 ? 'STREAK_PRIZE_CREDIT_PERCENT must be a whole number from 0 to 100'
     : s.prizeSplit.length < 1 || s.prizeSplit.length > 20 || !s.prizeSplit.every((x) => whole(x) && x > 0) || s.prizeSplit.reduce((a, b) => a + b, 0) !== 100 ? 'STREAK_PRIZE_SPLIT must be whole percentages for 1st, 2nd, 3rd… that add up to 100 (e.g. 40,35,25)'
     : !whole(s.runsPerWindow) || s.runsPerWindow < 1 ? 'STREAK_RUNS_PER_WINDOW must be at least 1'
     : !(s.runWindowMinutes > 0) ? 'STREAK_RUN_WINDOW_MINUTES must be greater than 0'
@@ -393,6 +396,7 @@ export async function streakHome(user: User | null) {
       startAt: cfg.configured ? cfg.startAt : null,
       endAt: cfg.configured ? cfg.endAt : null,
       prizePoolGd: cfg.prizePoolGd,
+      prizeCreditPercent: cfg.prizeCreditPercent,
       prizesGd: prizesGd(cfg),
       winners: cfg.winners,
       runsPerWindow: cfg.runsPerWindow,
@@ -464,15 +468,22 @@ export async function finalizeWinners() {
 }
 
 /** This player's prize, if they won one. */
+/** How a prize is paid: most to the wallet, the rest as Jara credit (spendable in Jara only). */
+export function prizeShares(amountGd: number, cfg: Config = streakConfig()) {
+  const creditGd = Math.floor((amountGd * cfg.prizeCreditPercent) / 100)
+  return { walletGd: amountGd - creditGd, creditGd }
+}
+
 async function prizeFor(user: User | null) {
   if (!user?.rootAddress) return null
   const p = (await run('SELECT * FROM streak_prizes WHERE event_id = ? AND root_address = ? AND user_id = ?', [streakConfig().eventId, user.rootAddress.toLowerCase(), user.id])).rows[0]
-  return p ? { rank: Number(p.rank), amountGd: Number(p.amount_gd), claimed: Boolean(p.paid_at), txHash: (p.tx_hash as string | null) ?? null } : null
+  return p ? { rank: Number(p.rank), amountGd: Number(p.amount_gd), ...prizeShares(Number(p.amount_gd)), claimed: Boolean(p.paid_at), txHash: (p.tx_hash as string | null) ?? null } : null
 }
 
 /**
- * A winner claims their prize: it is sent to the verified wallet they played with, exactly once
- * (durable operation id; a retry replays the same transaction).
+ * A winner claims their prize, exactly once: the wallet share is sent to the verified wallet they
+ * played with (durable operation id; a retry replays the same transaction), and the rest becomes
+ * Jara credit, which they can spend in Jara but not withdraw.
  */
 export async function claimPrize(input: User) {
   const cfg = streakConfig()
@@ -485,25 +496,35 @@ export async function claimPrize(input: User) {
     if (prize.claimed) return streakHome(user)
     const to = user.rootAddress!.toLowerCase() as Address
     const opId = `streak:${cfg.eventId}:prize:${prize.rank}:${to}`
-    const amount = parseEther(String(prize.amountGd))
-    let hash: string
-    try { hash = await sendGdFromStreakWallet(to, amount, opId) } catch (err) {
-      console.error('[streak] prize claim deferred', opId, err instanceof Error ? err.message : 'error')
-      throw new StreakError('Your prize could not be sent just now. Please tap Claim again in a minute; it will only ever be sent once.', 503, 'claim_retry')
+    const walletWei = parseEther(String(prize.walletGd))
+    let hash: string | null = null
+    if (walletWei > 0n) {
+      try { hash = await sendGdFromStreakWallet(to, walletWei, opId) } catch (err) {
+        console.error('[streak] prize claim deferred', opId, err instanceof Error ? err.message : 'error')
+        throw new StreakError('Your prize could not be sent just now. Please tap Claim again in a minute; it will only ever be sent once.', 503, 'claim_retry')
+      }
     }
+    const fmt = (n: number) => n.toLocaleString('en-US')
+    const title = prize.walletGd === 0
+      ? `🏆 Jara Streak: #${prize.rank} on the leaderboard. G$ ${fmt(prize.creditGd)} added to your Jara credit`
+      : prize.creditGd > 0
+        ? `🏆 Jara Streak: #${prize.rank} on the leaderboard. G$ ${fmt(prize.walletGd)} to your wallet + G$ ${fmt(prize.creditGd)} Jara credit`
+        : `🏆 Jara Streak: #${prize.rank} on the leaderboard. G$ ${fmt(prize.walletGd)} claimed to your wallet`
     await atomic(async (tx) => {
       const paid = await tx.execute({ sql: 'UPDATE streak_prizes SET tx_hash = ?, paid_at = ? WHERE event_id = ? AND rank = ? AND paid_at IS NULL', args: [hash, Date.now(), cfg.eventId, prize.rank] })
       if (!paid.rowsAffected) return
+      if (prize.creditGd > 0) await addCredit(tx, { id: `streak-prize:${cfg.eventId}:${prize.rank}`, userId: user.id, amountWei: parseEther(String(prize.creditGd)), reason: `Jara Streak prize, #${prize.rank}` })
       await tx.execute({ sql: 'INSERT OR IGNORE INTO rewards_paid (user_id, reward_key, amount_gd, created_at) VALUES (?, ?, ?, ?)', args: [user.id, `streak:${cfg.eventId}:prize`, prize.amountGd, Date.now()] })
-      await tx.execute({ sql: "INSERT OR IGNORE INTO activity (user_id, type, amount_wei, tx_hash, title, operation_id, created_at) VALUES (?, 'reward', ?, ?, ?, ?, ?)", args: [user.id, String(amount), hash, `🏆 Jara Streak: #${prize.rank} on the leaderboard. G$ ${prize.amountGd.toLocaleString('en-US')} claimed to your wallet`, opId, Date.now()] })
+      await tx.execute({ sql: "INSERT OR IGNORE INTO activity (user_id, type, amount_wei, tx_hash, title, operation_id, created_at) VALUES (?, 'reward', ?, ?, ?, ?, ?)", args: [user.id, String(parseEther(String(prize.amountGd))), hash, title, opId, Date.now()] })
     })
     return streakHome(user)
   }, { waitMs: 15_000 })
 }
 
 /**
- * Send a finished run's G$ (G$ 20 per correct answer) to the player's verified wallet, once: one
- * transfer per run, under a durable operation id, so a retry replays the same transaction.
+ * Settle a finished run's G$ (G$ 20 per correct answer), once. It becomes Jara credit: spendable in
+ * Jara, never withdrawable, and no blockchain transfer. A run whose wallet transfer had already been
+ * submitted before credit existed finishes that same transfer instead, so it is never paid twice.
  */
 export async function payRunEarnings(runId: string): Promise<'paid' | 'none' | 'retry' | 'open'> {
   const r = await getRun(runId)
@@ -512,16 +533,18 @@ export async function payRunEarnings(runId: string): Promise<'paid' | 'none' | '
   const earned = Number(r.earned_gd ?? 0)
   if (r.paid_at || earned <= 0) return r.paid_at ? 'paid' : 'none'
   const opId = `streak:${r.event_id}:run:${r.id}`
-  const to = r.root_address as Address
+  const amount = parseEther(String(earned))
+  const correct = Number((await run('SELECT COUNT(*) AS n FROM streak_answers WHERE run_id = ? AND gd > 0', [r.id])).rows[0].n)
+  const answers = `${correct} correct answer${correct === 1 ? '' : 's'}`
   try {
-    const amount = parseEther(String(earned))
-    const hash = await sendGdFromStreakWallet(to, amount, opId)
-    const correct = Number((await run('SELECT COUNT(*) AS n FROM streak_answers WHERE run_id = ? AND gd > 0', [r.id])).rows[0].n)
+    const toWallet = await hasSubmittedTransaction(opId)
+    const hash = toWallet ? await sendGdFromStreakWallet(r.root_address as Address, amount, opId) : null
     await atomic(async (tx) => {
       const paid = await tx.execute({ sql: 'UPDATE streak_runs SET paid_at = ?, tx_hash = ? WHERE id = ? AND paid_at IS NULL', args: [Date.now(), hash, r.id] })
       if (!paid.rowsAffected) return
-      await tx.execute({ sql: 'INSERT OR IGNORE INTO rewards_paid (user_id, reward_key, amount_gd, created_at) VALUES (?, ?, ?, ?)', args: [r.user_id, `streak:${r.event_id}:run:${r.id}`, earned, Date.now()] })
-      await tx.execute({ sql: "INSERT OR IGNORE INTO activity (user_id, type, amount_wei, tx_hash, title, operation_id, created_at) VALUES (?, 'reward', ?, ?, ?, ?, ?)", args: [r.user_id, String(amount), hash, `🔥 Jara Streak: ${correct} correct answer${correct === 1 ? '' : 's'}, G$ ${earned.toLocaleString('en-US')} sent to your wallet`, opId, Date.now()] })
+      if (!toWallet) await addCredit(tx, { id: opId, userId: r.user_id, amountWei: amount, reason: `Jara Streak: ${answers}` })
+      await tx.execute({ sql: 'INSERT OR IGNORE INTO rewards_paid (user_id, reward_key, amount_gd, created_at) VALUES (?, ?, ?, ?)', args: [r.user_id, opId, earned, Date.now()] })
+      await tx.execute({ sql: "INSERT OR IGNORE INTO activity (user_id, type, amount_wei, tx_hash, title, operation_id, created_at) VALUES (?, 'reward', ?, ?, ?, ?, ?)", args: [r.user_id, String(amount), hash, toWallet ? `🔥 Jara Streak: ${answers}, G$ ${earned.toLocaleString('en-US')} sent to your wallet` : `🔥 Jara Streak: ${answers}, G$ ${earned.toLocaleString('en-US')} added to your Jara credit`, opId, Date.now()] })
     })
     return 'paid'
   } catch (err) {

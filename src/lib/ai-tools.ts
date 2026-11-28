@@ -6,6 +6,7 @@ import { atomic, run } from './db'
 import { serverConfig } from './env'
 import { getJars, syncJars, withUserLock } from './jars'
 import { type User } from './users'
+import { creditWei } from './credit'
 
 // AI helpers people pay for with the G$ they've gathered. Each use moves G$
 // from the user's AI jar to the treasury on Celo; the treasury funds the
@@ -182,7 +183,9 @@ export async function runPaidJob(
     if (!request.data) {
       await syncJars(user)
       const jar = (await getJars(user.id)).find((j) => j.kind === 'ai')!
-      if (jar.balanceWei < parseEther(String(job.priceGd))) return { ok: false, reason: 'funds' }
+      const price = parseEther(String(job.priceGd))
+      // Jara credit is spent first; the AI jar covers whatever it doesn't.
+      if (jar.balanceWei + (await creditWei(user.id)) < price) return { ok: false, reason: 'funds' }
       if (!(await llmReachable())) return { ok: false, reason: 'offline' }
       let output: string | null
       try { output = (await job.produce())?.trim() || null } catch { return { ok: false, reason: 'offline' } }

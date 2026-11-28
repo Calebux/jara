@@ -236,6 +236,17 @@ const SCHEMA = [
     gd INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (run_id, idx)
   )`,
+  // Jara credit: G$ held by Jara for someone, spendable only inside Jara (airtime, data,
+  // electricity, Jara AI), never withdrawable. One row per movement; the balance is the sum.
+  // Ids are operation ids, so a retried grant, spend or refund is recorded once.
+  `CREATE TABLE IF NOT EXISTS credit_entries (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (id),
+    amount_wei TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS credit_entries_user_idx ON credit_entries (user_id)`,
   // Winners, frozen once when the bounty closes, so a re-run pays the same people the same amount.
   `CREATE TABLE IF NOT EXISTS streak_prizes (
     event_id TEXT NOT NULL,
@@ -313,6 +324,8 @@ async function connect(): Promise<Client> {
     "ALTER TABLE users ADD COLUMN gas_owed_wei TEXT NOT NULL DEFAULT '0'",
     'CREATE INDEX IF NOT EXISTS activity_provider_ref_idx ON activity (provider_ref)',
     'ALTER TABLE activity ADD COLUMN operation_id TEXT',
+    // Jara credit covering part of a purchase (the rest is charged from the wallet).
+    "ALTER TABLE payments ADD COLUMN credit_wei TEXT NOT NULL DEFAULT '0'",
     'CREATE UNIQUE INDEX IF NOT EXISTS activity_operation_idx ON activity(operation_id)',
     'CREATE INDEX IF NOT EXISTS streak_runs_open_idx ON streak_runs (event_id, finished_at, paid_at)',
   ]) {

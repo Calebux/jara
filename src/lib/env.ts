@@ -177,6 +177,9 @@ export function serverConfig() {
       // G$ 100,000 → G$ 40,000, 35,000, 25,000). The number of winners is the number of places.
       prizePoolGd: num('STREAK_PRIZE_POOL_GD', 100000),
       prizeSplit: (process.env.STREAK_PRIZE_SPLIT || '40,35,25').split(',').map((x) => Number(x.trim())),
+      // The part of each prize paid as Jara credit (spendable in Jara, not withdrawable). The rest, if any,
+      // goes to the wallet. 100: the whole prize is for spending in Jara.
+      prizeCreditPercent: num('STREAK_PRIZE_CREDIT_PERCENT', 100),
       // G$ for every correct answer, sent to the player's wallet after each run. Stops when the
       // whole bounty has paid STREAK_POOL_CAP_GD (0 turns per-answer G$ off), and each player earns
       // at most STREAK_DAILY_CAP_GD a day (Lagos time).

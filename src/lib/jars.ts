@@ -1,6 +1,7 @@
 import { formatEther } from 'viem'
 import { gasStatus, gdBalance, policyTotalLeft } from './chain'
 import { spendableWei, spendingPower } from './spend'
+import { creditWei } from './credit'
 import { atomic, run } from './db'
 import { hasPendingFunds, withAccountLock } from './account-lock'
 import { moneyRequest } from './money-request'
@@ -67,6 +68,8 @@ export interface Snapshot {
   limitTotalGd: number
   /** Network fees Jara paid for them, owed back in G$. */
   feesOwedGd: number
+  /** Jara credit (from bounty prizes): spendable in Jara on bills and AI, never withdrawable. */
+  creditGd: number
 }
 
 // Database-backed lock also covers other workers and survives process restarts.
@@ -205,7 +208,7 @@ export async function reallocateJar(user: User, from: JarKind | 'free', to: JarK
 }
 
 export async function snapshot(user: User): Promise<Snapshot> {
-  const [power, jars, rate] = await Promise.all([spendingPower(user), getJars(user.id), ngnPerGd()])
+  const [power, jars, rate, credit] = await Promise.all([spendingPower(user), getJars(user.id), ngnPerGd(), creditWei(user.id)])
   const balance = power.totalWei
   const walletWei = user.rootAddress ? power.walletWei || (await gdBalance(user.rootAddress).catch(() => null)) : null
   // Gas only matters to people still on the older setup; in wallet mode Jara fronts it.
@@ -246,6 +249,7 @@ export async function snapshot(user: User): Promise<Snapshot> {
     limitLeftGd: toGd(power.allowanceWei),
     limitTotalGd: toGd(totalLeft > power.allowanceWei ? totalLeft : power.allowanceWei),
     feesOwedGd: toGd(power.owedWei),
+    creditGd: toGd(credit),
   }
 }
 

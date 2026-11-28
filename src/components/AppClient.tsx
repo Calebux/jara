@@ -84,7 +84,7 @@ interface State {
     scout: { on: boolean; interests: string | null; lastAt: number | null; priceGd: number }
     verification: { expiresAt: number | null; daysLeft: number | null }
   }
-  snapshot: { jars: JarView[]; totalGd: number; freeGd: number; freeNgn: number; ngnPerGd: number; walletGd: number | null; gas: { celo: number; perTxCelo: number } | null; mode: 'wallet' | 'jar'; claimedGd: number; limitLeftGd: number; limitTotalGd: number; feesOwedGd: number }
+  snapshot: { jars: JarView[]; totalGd: number; freeGd: number; freeNgn: number; ngnPerGd: number; walletGd: number | null; gas: { celo: number; perTxCelo: number } | null; mode: 'wallet' | 'jar'; claimedGd: number; limitLeftGd: number; limitTotalGd: number; feesOwedGd: number; creditGd?: number }
   activity: Activity[]
   messages: Msg[]
   campusStreak?: StreakBannerState
@@ -1028,6 +1028,9 @@ function BalanceBar({ state, onProfile, onPay }: { state: State; onProfile: () =
         </div>
         <p className="mt-3 text-[44px] leading-none font-semibold tracking-[-0.05em] tabular-nums sm:text-[56px]"><span className="mr-2 text-[24px] font-medium tracking-normal text-crest sm:text-[30px]">G$</span>{gdFmt(snap.totalGd)}</p>
         <p className="mt-3 text-sm text-cream/55">≈ {formatNgn(Math.floor(snap.totalGd * snap.ngnPerGd))}</p>
+        {(snap.creditGd ?? 0) > 0 && (
+          <p className="mt-2 text-sm text-cream/75">+ <span className="font-semibold text-crest">G$ {gdFmt(snap.creditGd!)}</span> Jara credit <span className="text-cream/50">· for airtime, data, electricity and Jara AI</span></p>
+        )}
         <div className="mt-6 flex flex-wrap gap-2.5">
           {onPay && <button onClick={onPay} className="app-button bg-crest text-ink hover:bg-crest-soft"><Icon name="arrow" className="h-4 w-4 -rotate-45" /> Pay a bill</button>}
           <button onClick={onProfile} className="app-button border border-cream/20 bg-cream/10 text-cream hover:bg-cream/15"><Icon name="coins" className="h-4 w-4" /> Manage wallet</button>
