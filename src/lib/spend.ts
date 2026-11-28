@@ -19,6 +19,7 @@ import { serverConfig } from './env'
 import { getUserById, type User } from './users'
 import type { Row } from '@libsql/client'
 import { agentKey } from './wallets'
+import { addCredit, creditWei } from './credit'
 
 // Where Jara's G$ comes from.
 //
@@ -106,7 +107,7 @@ export async function spendGd(input: User, amount: bigint, request: { id: string
     if (amount <= 0n) throw new Error('Payment amount must be positive.')
     let payment = (await run('SELECT * FROM payments WHERE id = ?', [request.id])).rows[0]
     if (payment && (payment.user_id !== input.id || payment.jar !== request.jar || payment.amount_wei !== String(amount))) throw new Error('Payment request does not match its original amount or owner.')
-    if (payment?.status === 'paid') return { hash: String(payment.tx_hash) }
+    if (payment?.status === 'paid') return { hash: payment.tx_hash ? String(payment.tx_hash) : '' }
     if (payment?.status === 'failed') throw new PaymentFailedError()
     if (payment && payment.status !== 'reserved') throw new Error(`This payment is ${payment.status}. It cannot be charged again.`)
     const txId = `charge:${request.id}`
@@ -122,12 +123,27 @@ export async function spendGd(input: User, amount: bigint, request: { id: string
         throw new PaymentFailedError(err instanceof Error ? err.message : 'Wallet authorization failed.')
       }
     }
+    // Jara credit (from bounty prizes and rewards) is spent first. When it covers the whole purchase
+    // no tokens move (the treasury already holds it). When it covers part, the wallet pays the rest.
+    const creditNow = payment ? 0n : await creditWei(user.id)
+    if (!payment && creditNow >= amount) {
+      const paid = await atomic(async (tx) => {
+        if ((await creditWei(user.id, tx)) < amount) return false
+        await tx.execute({ sql: "INSERT INTO payments(id, user_id, jar, amount_wei, source, refund_address, fees_wei, status, created_at) VALUES (?, ?, ?, ?, 'credit', '', '0', 'paid', ?)", args: [request.id, user.id, request.jar, String(amount), Date.now()] })
+        await addCredit(tx, { id: `spend:${request.id}`, userId: user.id, amountWei: -amount, reason: `Paid for ${request.jar}` })
+        return true
+      })
+      if (paid) return { hash: '' }
+    }
     if (!payment) {
       if (await hasPendingFunds(user.id, user.rootAddress)) throw new TransferPendingError()
       const p = await spendingPower(user)
+      // The part Jara credit doesn't cover; only this comes from a wallet.
+      const creditPart = min(creditNow, amount)
+      const walletPart = amount - creditPart
       // Never split a purchase between the agent wallet and the user's wallet.
       const owedFromWallet = user.claimerActive ? p.owedWei : pos(p.owedWei - p.agentWei)
-      const source = !user.claimerActive && p.agentAvailWei >= amount ? 'jar' : pos(p.pullableWei - owedFromWallet) >= amount ? 'wallet' : null
+      const source = !user.claimerActive && p.agentAvailWei >= walletPart ? 'jar' : pos(p.pullableWei - owedFromWallet) >= walletPart ? 'wallet' : null
       if (!source) throw new Error('One wallet must cover this purchase after reserving outstanding fees. Move funds explicitly or choose a smaller amount.')
       // Charge only the reviewed amount. Legacy gas debt stays reserved for
       // separate reconciliation; it must not be appended to an approved purchase.
@@ -138,20 +154,27 @@ export async function spendGd(input: User, amount: bigint, request: { id: string
         // A bill can be bigger than its jar's target: cover the gap from G$ not budgeted
         // to any jar. Other jars are never touched.
         const unassigned = pos(p.totalWei - all.reduce((s, r) => s + BigInt(String(r.balance_wei)), 0n))
-        if (balance + unassigned < amount) {
+        if (balance + unassigned < walletPart) {
           throw new Error(`Not enough G$ in your ${request.jar} jar (and nothing unbudgeted to top it up). Move money into it first; other jars are protected.`)
         }
-        await tx.execute({ sql: 'UPDATE jars SET balance_wei = ? WHERE user_id = ? AND kind = ?', args: [String(pos(balance - amount)), user.id, request.jar] })
-        await tx.execute({ sql: 'INSERT INTO payments(id, user_id, jar, amount_wei, source, refund_address, fees_wei, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', args: [request.id, user.id, request.jar, String(amount), source, source === 'jar' ? user.agentAddress : user.rootAddress!, String(fees), Date.now()] })
+        // The credit part is spent with the reservation, in the same transaction.
+        if (creditPart > 0n) {
+          if ((await creditWei(user.id, tx)) < creditPart) throw new Error('Your Jara credit changed. Please try again.')
+          await addCredit(tx, { id: `spend:${request.id}`, userId: user.id, amountWei: -creditPart, reason: `Paid for ${request.jar} (part)` })
+        }
+        await tx.execute({ sql: 'UPDATE jars SET balance_wei = ? WHERE user_id = ? AND kind = ?', args: [String(pos(balance - walletPart)), user.id, request.jar] })
+        await tx.execute({ sql: 'INSERT INTO payments(id, user_id, jar, amount_wei, source, refund_address, fees_wei, credit_wei, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', args: [request.id, user.id, request.jar, String(amount), source, source === 'jar' ? user.agentAddress : user.rootAddress!, String(fees), String(creditPart), Date.now()] })
       })
       payment = (await run('SELECT * FROM payments WHERE id = ?', [request.id])).rows[0]
     }
     const collectedFees = BigInt(String(payment.fees_wei))
+    // Jara credit already paid its part when the payment was reserved; the wallet pays the rest.
+    const fromWallet = amount - BigInt(String(payment.credit_wei ?? '0'))
     let result: { hash: string; feeWei: bigint }
     try {
       result = payment.source === 'wallet'
-        ? await pullGdFromWallet(payment.refund_address as Address, amount + collectedFees, txId, user.claimerActive)
-        : await transferFromAgent(await agentKey(user), treasuryAddress(), amount + collectedFees, { sponsor: true, operationId: txId })
+        ? await pullGdFromWallet(payment.refund_address as Address, fromWallet + collectedFees, txId, user.claimerActive)
+        : await transferFromAgent(await agentKey(user), treasuryAddress(), fromWallet + collectedFees, { sponsor: true, operationId: txId })
     } catch (err) {
       // A timeout is NOT evidence that no money moved.
       if (err instanceof TransferRevertedError || !(await hasSubmittedTransaction(txId))) {
@@ -174,8 +197,11 @@ async function releaseReservation(payment: Row) {
   await atomic(async (tx) => {
     const claimed = await tx.execute({ sql: "UPDATE payments SET status = 'failed' WHERE id = ? AND status = 'reserved'", args: [payment.id] })
     if (!claimed.rowsAffected) return
+    const creditPart = BigInt(String(payment.credit_wei ?? '0'))
     const jar = (await tx.execute({ sql: 'SELECT balance_wei FROM jars WHERE user_id = ? AND kind = ?', args: [payment.user_id, payment.jar] })).rows[0]
-    await tx.execute({ sql: 'UPDATE jars SET balance_wei = ? WHERE user_id = ? AND kind = ?', args: [String(BigInt(String(jar.balance_wei)) + BigInt(String(payment.amount_wei))), payment.user_id, payment.jar] })
+    await tx.execute({ sql: 'UPDATE jars SET balance_wei = ? WHERE user_id = ? AND kind = ?', args: [String(BigInt(String(jar.balance_wei)) + BigInt(String(payment.amount_wei)) - creditPart), payment.user_id, payment.jar] })
+    // Nothing was charged: the credit part goes back to credit.
+    if (creditPart > 0n) await addCredit(tx, { id: `release:${payment.id}`, userId: String(payment.user_id), amountWei: creditPart, reason: `Not charged: ${payment.jar}` })
   })
 }
 
@@ -186,18 +212,30 @@ export async function refundPayment(user: User, id: string): Promise<string> {
     if (!p) throw new Error('Payment record not found.')
     if (p.status === 'refunded') return String(p.refund_hash)
     if (p.status !== 'paid' && p.status !== 'refunding') throw new Error('Payment has not been confirmed; no refund can be sent yet.')
+    // A credit payment is refunded as credit, never sent to a wallet: credit is not withdrawable.
+    if (p.source === 'credit') {
+      await atomic(async (tx) => {
+        const done = await tx.execute({ sql: "UPDATE payments SET status = 'refunded', refund_hash = '' WHERE id = ? AND status IN ('paid', 'refunding')", args: [id] })
+        if (done.rowsAffected) await addCredit(tx, { id: `refund:${id}`, userId: user.id, amountWei: BigInt(String(p.amount_wei)), reason: `Refund for ${p.jar}` })
+      })
+      return ''
+    }
     await run("UPDATE payments SET status = 'refunding' WHERE id = ?", [id])
-    const hash = await sendGdFromTreasury(p.refund_address as Address, BigInt(String(p.amount_wei)), `refund:${id}`)
+    // Only the wallet's part goes back to the wallet; a credit part goes back to credit.
+    const creditPart = BigInt(String(p.credit_wei ?? '0'))
+    const walletPart = BigInt(String(p.amount_wei)) - creditPart
+    const hash = await sendGdFromTreasury(p.refund_address as Address, walletPart, `refund:${id}`)
     const available = await spendableWei(user)
     await atomic(async (tx) => {
       const all = (await tx.execute({ sql: 'SELECT balance_wei FROM jars WHERE user_id = ?', args: [user.id] })).rows
       const allocated = all.reduce((sum, row) => sum + BigInt(String(row.balance_wei)), 0n)
       // ERC-20 refunds restore tokens, but do not restore the allowance consumed
       // by transferFrom. Only put spendable funds back into the jar budget.
-      const credit = min(BigInt(String(p.amount_wei)), pos(available - allocated))
+      const credit = min(walletPart, pos(available - allocated))
       const jar = (await tx.execute({ sql: 'SELECT balance_wei FROM jars WHERE user_id = ? AND kind = ?', args: [user.id, p.jar] })).rows[0]
       await tx.execute({ sql: 'UPDATE jars SET balance_wei = ? WHERE user_id = ? AND kind = ?', args: [String(BigInt(String(jar.balance_wei)) + credit), user.id, p.jar] })
       await tx.execute({ sql: "UPDATE payments SET status = 'refunded', refund_hash = ? WHERE id = ?", args: [hash, id] })
+      if (creditPart > 0n) await addCredit(tx, { id: `refund:${id}`, userId: user.id, amountWei: creditPart, reason: `Refund for ${p.jar} (part)` })
     })
     return hash
   })

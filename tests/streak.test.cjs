@@ -18,6 +18,10 @@ const users = require('../src/lib/users.ts')
 const chain = require('../src/lib/chain.ts')
 const streak = require('../src/lib/streak/service.ts')
 const rules = require('../src/lib/streak/rules.ts')
+const spend = require('../src/lib/spend.ts')
+const credit = require('../src/lib/credit.ts')
+const { atomic } = require('../src/lib/db.ts')
+const { parseEther } = require('viem')
 const { STREAK_QUESTIONS } = require('../src/lib/streak/questions.ts')
 const { CAMPUSES } = require('../src/lib/streak/campuses.ts')
 
@@ -185,7 +189,7 @@ test('campus: picked once, and campuses rank by their players’ best scores', a
   assert.ok(board.campuses.some((c) => c.campus === 'UNILAG' && c.score > 0))
 })
 
-test('G$ 20 per correct answer: shown at once, sent to the wallet once when the run ends, capped per day', async () => {
+test('G$ 20 per correct answer: shown at once, added to Jara credit once when the run ends (not the wallet), capped per day', async () => {
   const user = await player()
   const before = Number(await chain.gdBalance(user.rootAddress)) / 1e18
   let view = await streak.startRun(user)
@@ -205,8 +209,10 @@ test('G$ 20 per correct answer: shown at once, sent to the wallet once when the 
   assert.equal(await streak.payRunEarnings(view.runId), 'paid')
   await streak.settlePlayer(user)
   await streak.settleEarnings()
-  assert.equal(Math.round(Number(await chain.gdBalance(user.rootAddress)) / 1e18 - before), 100)
-  assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE user_id = ? AND title LIKE '%Jara Streak: %correct%'", [user.id])).rows[0].n, 1)
+  // It becomes Jara credit: spendable in Jara, never sent to the wallet.
+  assert.equal(Math.round(Number(await chain.gdBalance(user.rootAddress)) / 1e18 - before), 0)
+  assert.equal(await credit.creditWei(user.id), parseEther('100'))
+  assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE user_id = ? AND title LIKE '%added to your Jara credit%'", [user.id])).rows[0].n, 1)
   // An abandoned run (the player closed the app mid-question) is paid by the cron once it times out.
   const other = await player()
   const v = await streak.startRun(other)
@@ -237,7 +243,7 @@ test('the top 3 split the G$ 100,000 pool 40/35/25, claim it once, only after th
     // Nothing is sent until the winner claims.
     assert.deepEqual((await Promise.all(leaders.map(balance))).map((b, i) => Math.round(b - before[i])), [0, 0, 0])
     const home = await streak.streakHome(leaders[0])
-    assert.deepEqual(home.prize, { rank: 1, amountGd: 40_000, claimed: false, txHash: null })
+    assert.deepEqual(home.prize, { rank: 1, amountGd: 40_000, walletGd: 0, creditGd: 40_000, claimed: false, txHash: null })
     assert.equal(home.event.prizePoolGd, 100_000)
     assert.deepEqual(home.event.prizesGd, [40_000, 35_000, 25_000])
     const claimed = await streak.claimPrize(leaders[0])
@@ -246,10 +252,63 @@ test('the top 3 split the G$ 100,000 pool 40/35/25, claim it once, only after th
     await streak.claimPrize(leaders[0])
     await assert.rejects(streak.claimPrize(fourth), (err) => err.code === 'no_prize')
     await streak.finalizeWinners()
-    assert.deepEqual((await Promise.all(leaders.map(balance))).map((b, i) => Math.round(b - before[i])), [40_000, 0, 0])
+    // The whole prize is Jara credit: spendable in Jara, never sent to the wallet.
+    assert.deepEqual((await Promise.all(leaders.map(balance))).map((b, i) => Math.round(b - before[i])), [0, 0, 0])
+    assert.equal(await credit.creditWei(leaders[0].id), parseEther('40000'))
+    assert.equal(await credit.creditWei(leaders[1].id), 0n)
     assert.equal((await run("SELECT COUNT(*) AS n FROM activity WHERE type = 'reward' AND title LIKE '%Jara Streak: #%'")).rows[0].n, 1)
     await assert.rejects(streak.startRun(leaders[1]), (err) => err.code === 'streak_closed')
   } finally { process.env.STREAK_END_AT = String(Date.now() + HOUR) }
+})
+
+test('Jara credit pays for a purchase without moving G$, is charged once, and a refund goes back to credit', async () => {
+  const user = await player()
+  await atomic((tx) => credit.addCredit(tx, { id: `grant:${user.id}`, userId: user.id, amountWei: parseEther('1000'), reason: 'test' }))
+  const walletBefore = await chain.gdBalance(user.rootAddress)
+  const paid = await spend.spendGd(user, parseEther('300'), { id: `credit-buy:${user.id}`, jar: 'airtime' })
+  assert.equal(paid.hash, '')
+  assert.equal(await credit.creditWei(user.id), parseEther('700'))
+  // The same purchase retried (double tap, network retry) is not charged again.
+  assert.equal((await spend.spendGd(user, parseEther('300'), { id: `credit-buy:${user.id}`, jar: 'airtime' })).hash, '')
+  assert.equal(await credit.creditWei(user.id), parseEther('700'))
+  const row = (await run('SELECT source, status FROM payments WHERE id = ?', [`credit-buy:${user.id}`])).rows[0]
+  assert.equal(row.source, 'credit'); assert.equal(row.status, 'paid')
+  assert.equal(await chain.gdBalance(user.rootAddress), walletBefore)
+  // A failed bill paid with credit is refunded as credit, never sent to a wallet.
+  assert.equal(await spend.refundPayment(user, `credit-buy:${user.id}`), '')
+  assert.equal(await credit.creditWei(user.id), parseEther('1000'))
+  assert.equal(await spend.refundPayment(user, `credit-buy:${user.id}`), '')
+  assert.equal(await credit.creditWei(user.id), parseEther('1000'))
+  assert.equal(await chain.gdBalance(user.rootAddress), walletBefore)
+  // Credit that doesn't cover a purchase isn't used at all (one source per purchase).
+  await assert.rejects(spend.spendGd(user, parseEther('5000'), { id: `too-big:${user.id}`, jar: 'light' }))
+  assert.equal(await credit.creditWei(user.id), parseEther('1000'))
+})
+
+test('credit covers part of a purchase and the wallet the rest; a failure restores both; a refund returns each part', async () => {
+  const outbox = require('../src/lib/chain-outbox.ts')
+  const user = await player()
+  await chain.mockDeposit(user.agentAddress, parseEther('2000'))
+  await atomic((tx) => credit.addCredit(tx, { id: `grant:${user.id}:mix`, userId: user.id, amountWei: parseEther('1000'), reason: 'test' }))
+  const agentBefore = await chain.gdBalance(user.agentAddress)
+  // G$ 1,500: G$ 1,000 from credit, G$ 500 from the wallet.
+  await spend.spendGd(user, parseEther('1500'), { id: `mix:${user.id}`, jar: 'airtime' })
+  assert.equal(await credit.creditWei(user.id), 0n)
+  assert.equal(agentBefore - (await chain.gdBalance(user.agentAddress)), parseEther('500'))
+  assert.equal((await run('SELECT credit_wei FROM payments WHERE id = ?', [`mix:${user.id}`])).rows[0].credit_wei, String(parseEther('1000')))
+  // Refund: G$ 500 back to the wallet, G$ 1,000 back to credit, once.
+  await spend.refundPayment(user, `mix:${user.id}`)
+  await spend.refundPayment(user, `mix:${user.id}`)
+  assert.equal(await credit.creditWei(user.id), parseEther('1000'))
+  assert.equal(await chain.gdBalance(user.agentAddress), agentBefore)
+  // A purchase whose transfer fails charges nothing: the credit part comes back too.
+  const original = chain.transferFromAgent
+  chain.transferFromAgent = async () => { throw new outbox.TransferRevertedError('0xfail') }
+  try {
+    await assert.rejects(spend.spendGd(user, parseEther('1200'), { id: `fail:${user.id}`, jar: 'data' }), spend.PaymentFailedError)
+  } finally { chain.transferFromAgent = original }
+  assert.equal(await credit.creditWei(user.id), parseEther('1000'))
+  assert.equal(await chain.gdBalance(user.agentAddress), agentBefore)
 })
 
 after(async () => { (await db()).close(); rmSync(directory, { recursive: true, force: true }) })

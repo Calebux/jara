@@ -16,6 +16,7 @@ async function get() {
     chats,
     balanceGd: snap.totalGd,
     aiJarGd: snap.jars.find((j) => j.kind === 'ai')?.balanceGd ?? 0,
+    creditGd: snap.creditGd,
     tools: (Object.keys(AI_TOOLS) as AiToolId[]).map((id) => ({
       id,
       name: AI_TOOLS[id].name,

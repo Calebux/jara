@@ -35,6 +35,8 @@ interface Home {
   chats: ChatSummary[]
   balanceGd: number
   aiJarGd: number
+  /** Jara credit, which can pay for a question when the AI jar can't. */
+  creditGd?: number
   tools: Tool[]
 }
 
@@ -201,7 +203,7 @@ export function AiChat() {
   const tool = home.tools.find((t) => t.id === toolId) ?? home.tools[0]
   const isFollowUp = messages.some((m) => m.role === 'assistant' && !m.pending)
   const price = isFollowUp ? tool.followUpGd : tool.priceGd
-  const canAfford = home.aiJarGd >= price || hasRetry
+  const canAfford = home.aiJarGd + (home.creditGd ?? 0) >= price || hasRetry
 
   const sidebar = (
     <div className="flex h-full flex-col bg-forest text-cream">

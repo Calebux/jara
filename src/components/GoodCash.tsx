@@ -101,32 +101,23 @@ type Props = {
   heldByJara?: boolean
 }
 
-export function GoodCashCard({ userId, wallet, flash, defaultAmountG, heldByJara }: Props) {
+/**
+ * Manage wallet: add G$ by paying naira. There is no general cash-out here on purpose: cash-out is
+ * offered only where Jara promised it (the referral reward card and the Jara Streak winner card),
+ * so G$ given to use Jara isn't simply withdrawn.
+ */
+export function GoodCashCard({ userId, wallet, flash }: Props) {
   const [error, setError] = useState<string | null>(null)
   if (!goodCashConfigured()) return null
-
-  // GoodCash hands over the one checked transaction; the verified wallet sends it on Celo.
-  const send = verifiedSender(wallet, setError)
-  const onCashOut = cashOutEvents(flash, setError)
 
   return (
     <GoodCashProvider publishableKey={PUBLISHABLE_KEY} theme={THEME}>
       <section className="rounded-2xl bg-white p-5">
-        <p className="font-bold">Bank with GoodCash</p>
+        <p className="font-bold">Add G$ with naira</p>
         <p className="mt-1 text-sm leading-relaxed text-ink/60">
-          Turn G$ into naira in your own Nigerian bank account, or add G$ by paying naira. One confirmation in your wallet.
+          Pay naira from your Nigerian bank and the G$ lands in your wallet, ready to use in Jara.
         </p>
-        {heldByJara && <p className="mt-2 text-xs font-semibold text-ink/55">Cash out uses the G$ in your own wallet ({wallet.slice(0, 6)}…{wallet.slice(-4)}), not G$ held in your Jara jars.</p>}
         <div className="mt-4 grid gap-2">
-          <CashOutButton
-            label="Cash out G$ to my bank"
-            className={primary}
-            signer={send}
-            wallet={wallet}
-            partnerRef={userId}
-            defaultAmountG={defaultAmountG && defaultAmountG > 0 ? Math.floor(defaultAmountG) : undefined}
-            onEvent={onCashOut}
-          />
           <TopUp wallet={wallet} partnerRef={userId} flash={flash} onError={setError} />
         </div>
         {error && <p role="alert" className="mt-3 rounded-xl bg-[#fcf0e7] px-4 py-3 text-sm font-semibold">{error}</p>}

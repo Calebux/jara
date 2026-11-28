@@ -210,9 +210,13 @@ export async function payBill(user: User, action: PendingAction): Promise<BillRe
       await updateActivity(activityId, { status: 'refund_pending', title: `Refund pending: ${title}` })
       try {
         const refundHash = await refundPayment(user, request.id)
-        await run(`INSERT OR IGNORE INTO activity(user_id, type, jar, amount_wei, tx_hash, status, title, operation_id, created_at) VALUES (?, 'refund', ?, ?, ?, 'done', ?, ?, ?)`, [user.id, action.kind, data.amount, refundHash, `Refunded G$ ${formatEther(needed)}`, `refund:${request.id}`, Date.now()])
-        await updateActivity(activityId, { status: 'failed', title: `Failed: ${title}`, detail: 'G$ refund confirmed to the original funding wallet.' })
-        return request.finish({ ok: false, message: `The bill was declined. Your G$ ${formatEther(needed)} refund is confirmed to the wallet that paid.` })
+        // A purchase paid with Jara credit is refunded as credit (no transaction to link to). One paid
+        // partly with credit sends the wallet part back to the wallet and the rest back to credit.
+        const toCredit = !refundHash
+        const creditBack = BigInt(String((await run('SELECT credit_wei FROM payments WHERE id = ?', [request.id])).rows[0]?.credit_wei ?? '0'))
+        await run(`INSERT OR IGNORE INTO activity(user_id, type, jar, amount_wei, tx_hash, status, title, operation_id, created_at) VALUES (?, 'refund', ?, ?, ?, 'done', ?, ?, ?)`, [user.id, action.kind, data.amount, refundHash || null, toCredit ? `Refunded G$ ${formatEther(needed)} to your Jara credit` : `Refunded G$ ${formatEther(needed)}`, `refund:${request.id}`, Date.now()])
+        await updateActivity(activityId, { status: 'failed', title: `Failed: ${title}`, detail: toCredit ? 'Refunded to your Jara credit.' : creditBack > 0n ? `G$ refund confirmed to the original funding wallet, and G$ ${formatEther(creditBack)} back to your Jara credit.` : 'G$ refund confirmed to the original funding wallet.' })
+        return request.finish({ ok: false, message: toCredit ? `The bill was declined. Your G$ ${formatEther(needed)} is back in your Jara credit.` : `The bill was declined. Your G$ ${formatEther(needed)} refund is confirmed to the wallet that paid.` })
       } catch (err) {
         console.warn('[bills] refund still pending', request.id, err instanceof Error ? err.message : err)
         return { ok: false, pending: true, message: 'The bill was declined. Your refund is still pending; Jara will keep checking it.' }
